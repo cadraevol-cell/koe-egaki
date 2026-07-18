@@ -1072,8 +1072,11 @@
       state.penY = eased;
 
       if (state.gameState === "playing"){
-        // horizontal: always moves right across the whole play area (side
-        // zones + canvas), wraps back to the left edge forever
+        // horizontal: state.penX lives in SCREEN space -- it always sweeps
+        // edge-to-edge of the viewport at the same real-time speed, zoomed
+        // or not (the camera never chases it; see updateCamera). Zooming
+        // only changes how much *real* canvas distance that screen sweep
+        // covers, via screenXToRealX below.
         var w = state.playCssW;
         var margin = 10;
         var wrapped = false;
@@ -1085,8 +1088,8 @@
 
         // only ink the canvas when both the previous and current point are
         // actually over the drawable square (not the side zones)
-        var localX = state.penX - state.sideZoneW;
-        var prevLocalX = state.prevPenX - state.sideZoneW;
+        var localX = screenXToRealX(state.penX) - state.sideZoneW;
+        var prevLocalX = screenXToRealX(state.prevPenX) - state.sideZoneW;
         var overCanvasNow = localX >= 0 && localX <= state.canvasCssW;
         var overCanvasPrev = prevLocalX >= 0 && prevLocalX <= state.canvasCssW;
 
@@ -1113,37 +1116,54 @@
     ctx.stroke();
   }
 
-  // Applies the zoom/pan transform to Layer 1 (the "world": canvas + side
-  // scenery, .camera) so it keeps the pen centered in the viewport. Layer 2
-  // (the pen, #cursorCanvas) is never scaled by this -- see drawCursorOverlay.
+  // Zoom always magnifies around the fixed center of the play area -- the
+  // camera never chases the pen (that would make the pen's on-screen speed
+  // change with zoom, which is exactly what we don't want here). Layer 2
+  // (the pen, #cursorCanvas) is a sibling of .camera and is never scaled by
+  // this transform -- see drawCursorOverlay.
   function updateCamera(){
     if (state.zoom <= 1){
       $camera.style.transform = "";
       return;
     }
     var z = state.zoom;
-    var tx = state.playCssW / (2 * z) - state.penX;
-    var ty = state.canvasCssH / (2 * z) - state.penY;
+    var centerX = state.playCssW / 2;
+    var centerY = state.canvasCssH / 2;
+    var tx = state.playCssW / (2 * z) - centerX;
+    var ty = state.canvasCssH / (2 * z) - centerY;
     $camera.style.transform = "scale(" + z + ") translate(" + tx + "px, " + ty + "px)";
+  }
+
+  // state.penX is a SCREEN-space coordinate (it always sweeps edge-to-edge
+  // of the viewport at a constant real-time speed, see step()). To know
+  // where that actually lands on the (possibly zoomed) canvas, invert the
+  // same fixed-center transform updateCamera() applies to Layer 1.
+  function screenXToRealX(screenX){
+    if (state.zoom <= 1) return screenX;
+    var centerX = state.playCssW / 2;
+    return centerX + (screenX - centerX) / state.zoom;
+  }
+
+  // The inverse of screenXToRealX, but for Y -- pitch drives state.penY
+  // directly in real canvas coordinates, so to know where to draw the pen
+  // icon on screen (Layer 2, never scaled) we need the forward transform.
+  function realYToScreenY(realY){
+    if (state.zoom <= 1) return realY;
+    var centerY = state.canvasCssH / 2;
+    return centerY + (realY - centerY) * state.zoom;
   }
 
   // The pen cursor is drawn on a separate transparent overlay canvas stacked
   // above the drawing canvas (spanning the full play area, side zones
   // included), so it never gets baked into the saved artwork. It is Layer 2
-  // and is never scaled by zoom -- while zoomed, the camera pans Layer 1
-  // underneath it, so the pen itself just sits pinned at the viewport
-  // center, always drawn at its normal, un-magnified size.
+  // and is never scaled by zoom -- it's always drawn at its normal,
+  // un-magnified size, at the screen position state.penX already lives in
+  // (X) and realYToScreenY(state.penY) maps to (Y).
   function drawCursorOverlay(){
     cctx.clearRect(0, 0, state.playCssW, state.canvasCssH);
 
-    var cx, cy;
-    if (state.zoom > 1){
-      cx = state.playCssW / 2;
-      cy = state.canvasCssH / 2;
-    } else {
-      cx = state.penX;
-      cy = state.penY;
-    }
+    var cx = state.penX;
+    var cy = realYToScreenY(state.penY);
     cctx.save();
     cctx.translate(cx, cy);
     cctx.rotate(Math.PI / 5.5);
