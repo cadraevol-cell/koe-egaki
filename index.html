@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>こえ描き - 声でお絵かき</title>
+<style>
+  :root{
+    --bg: #10131a;
+    --panel: #1b1f2a;
+    --panel2: #232837;
+    --accent: #7c5cff;
+    --accent2: #ff5c9c;
+    --text: #f2f2f7;
+    --sub: #9aa0b4;
+    --line: #2e3444;
+    --good: #4ade80;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin:0; padding:0; width:100%; height:100%;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    overscroll-behavior: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #app{ width:100%; height:100%; position:relative; overflow:hidden; }
+  .screen{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    opacity:0; pointer-events:none;
+    transition: opacity .25s ease;
+  }
+  .screen.active{ opacity:1; pointer-events:auto; }
+
+  /* ---------- HOME ---------- */
+  #home{
+    align-items:center; justify-content:center; text-align:center;
+    padding: 24px;
+    background:
+      radial-gradient(circle at 20% 15%, rgba(124,92,255,.25), transparent 45%),
+      radial-gradient(circle at 80% 85%, rgba(255,92,156,.2), transparent 45%),
+      var(--bg);
+  }
+  #home h1{
+    font-size: clamp(2rem, 8vw, 3.4rem);
+    margin: 0 0 8px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    letter-spacing: 1px;
+  }
+  #home p.desc{
+    color: var(--sub);
+    font-size: clamp(.95rem, 3vw, 1.1rem);
+    margin: 0 0 6px;
+  }
+  #home .doodle-icon{
+    font-size: 3.4rem;
+    margin-bottom: 6px;
+    filter: drop-shadow(0 4px 12px rgba(124,92,255,.4));
+  }
+  .big-btn{
+    margin-top: 28px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    padding: 16px 48px;
+    border-radius: 999px;
+    border: none;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(124,92,255,.35);
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .big-btn:active{ transform: scale(.96); box-shadow: 0 4px 12px rgba(124,92,255,.3); }
+  #homeMsg{
+    margin-top: 18px;
+    font-size: .9rem;
+    color: var(--accent2);
+    min-height: 1.4em;
+    max-width: 420px;
+    line-height: 1.5;
+  }
+  .howto{
+    margin-top: 26px;
+    color: var(--sub);
+    font-size: .82rem;
+    max-width: 460px;
+    line-height: 1.7;
+    text-align: left;
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 18px;
+  }
+  .howto b{ color: var(--text); }
+
+  /* ---------- GAME ---------- */
+  #game{
+    display:flex; flex-direction:column;
+    height:100%;
+    padding: 8px;
+    gap: 6px;
+  }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .topic-box{
+    flex: 1 1 auto;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 8px 14px;
+    text-align:center;
+  }
+  .topic-box .label{ font-size:.7rem; color: var(--sub); letter-spacing:1px; }
+  .topic-box .value{
+    font-size: clamp(1.2rem, 5vw, 1.7rem);
+    font-weight: 800;
+    color: var(--text);
+  }
+  .icon-btn-row{ display:flex; gap:6px; flex-wrap: wrap; }
+  .icon-btn{
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-size: .78rem;
+    padding: 8px 10px;
+    border-radius: 10px;
+    cursor:pointer;
+    white-space: nowrap;
+  }
+  .icon-btn:active{ background: #2c3346; }
+
+  .main-area{
+    flex: 1 1 auto;
+    display:flex;
+    gap: 8px;
+    min-height: 0;
+  }
+  .canvas-area{
+    flex: 1 1 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .play-wrap{
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  /* Layer 1 (the "world": canvas + side scenery) -- this is the layer that
+     actually gets visually zoomed/panned. Layer 2 (the pen, #cursorCanvas)
+     stays a sibling outside of .camera so it is never scaled -- it keeps
+     its normal on-screen size and, while zoomed, is drawn pinned at the
+     viewport center (the camera pans to keep the pen there instead). */
+  .camera{
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+  /* Decorative "scenery" backdrop for the side zones -- pure CSS (sky,
+     sun, clouds, distant mountains), no drawing happens here, it just
+     signals "not canvas" without resorting to a text label. */
+  .side-zone{
+    flex-shrink: 0;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    opacity: .88;
+    background:
+      radial-gradient(circle 8px at 50% 18%, #ffe9a8 95%, transparent 100%),
+      radial-gradient(ellipse 60% 26% at 32% 36%, rgba(255,255,255,.9) 60%, transparent 100%),
+      radial-gradient(ellipse 52% 22% at 72% 28%, rgba(255,255,255,.85) 60%, transparent 100%),
+      linear-gradient(180deg, #bfe0f7 0%, #eaf6ff 55%, #f5fbff 100%);
+    pointer-events: none;
+  }
+  .side-zone::after{
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 42%;
+    background: linear-gradient(180deg, #9cc496, #6f9c68);
+    clip-path: polygon(0% 100%, 0% 58%, 22% 26%, 40% 52%, 58% 16%, 78% 46%, 100% 22%, 100% 100%);
+  }
+  .canvas-wrap{
+    position: relative;
+    flex-shrink: 0;
+    background: #fff;
+  }
+  .canvas-wrap canvas{
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%; display:block;
+    touch-action: none;
+  }
+  #cursorCanvas{
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .pitch-indicator{
+    position: absolute;
+    top: 8px; right: 8px;
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    font-size: .72rem;
+    padding: 3px 9px;
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .palette{
+    flex: 0 0 auto;
+    width: 52px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 6px;
+    overflow-y: auto;
+  }
+  .swatch{
+    width: 100%;
+    aspect-ratio: 1/1;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.15);
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    padding: 0;
+  }
+  .swatch.selected{
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  }
+  input.custom-swatch{
+    -webkit-appearance: none;
+    appearance: none;
+    background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+    overflow: hidden;
+  }
+  input.custom-swatch::-webkit-color-swatch-wrapper{ padding: 0; }
+  input.custom-swatch::-webkit-color-swatch{ border: none; border-radius: 50%; }
+  input.custom-swatch::-moz-color-swatch{ border: none; border-radius: 50%; }
+
+  .bottombar{
+    flex: 0 0 auto;
+    display:flex;
+    gap: 8px;
+  }
+  #mainBtn{
+    flex: 1 1 auto;
+    min-height: 62px;
+    border-radius: 18px;
+    border: none;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #fff;
+    background: linear-gradient(180deg, var(--accent), #5b3fd6);
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(124,92,255,.4);
+    touch-action: none;
+  }
+  #mainBtn.drawing-mode{
+    background: linear-gradient(180deg, var(--accent2), #d63f7c);
+    box-shadow: 0 6px 18px rgba(255,92,156,.45);
+  }
+  #mainBtn.active-press{
+    transform: scale(.97);
+    filter: brightness(1.15);
+  }
+  #btnFinish{
+    flex: 0 0 76px;
+    min-height: 62px;
+    border-radius: 18px;
+    border: none;
+    font-size: .8rem;
+    font-weight: 800;
+    line-height: 1.3;
+    color: #133020;
+    background: linear-gradient(180deg, var(--good), #22a563);
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(74,222,128,.4);
+  }
+  #btnFinish:active{ transform: scale(.96); filter: brightness(1.08); }
+
+  /* ---------- always-visible controls (speed / thickness / sensitivity) ---------- */
+  .controls-row{
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 8px 14px;
+  }
+  .controls-row .ctrl{
+    flex: 1 1 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: .68rem;
+    color: var(--sub);
+  }
+  .controls-row input[type=range]{ width: 100%; accent-color: var(--accent); }
+
+  /* ---------- result screen ---------- */
+  #result{
+    align-items: center; justify-content: center;
+    padding: 20px;
+    background:
+      radial-gradient(circle at 20% 15%, rgba(74,222,128,.18), transparent 45%),
+      radial-gradient(circle at 80% 85%, rgba(124,92,255,.2), transparent 45%),
+      var(--bg);
+  }
+  .result-card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 28px 24px;
+    max-width: 340px;
+    width: 100%;
+    text-align: center;
+  }
+  .result-title{
+    font-size: 2.1rem;
+    font-weight: 900;
+    margin-bottom: 14px;
+    background: linear-gradient(90deg, var(--good), var(--accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .judge-label{ font-size:.75rem; color:var(--sub); letter-spacing:1px; }
+  .judge-topic{ font-size:1.1rem; font-weight:800; margin-top:2px; }
+  .judge-percent{
+    font-size: 3.2rem;
+    font-weight: 900;
+    margin: 12px 0 4px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .judge-persona{ font-size:.8rem; color:var(--sub); margin-bottom:6px; }
+  .judge-comment{
+    font-size: .98rem;
+    color: var(--text);
+    line-height: 1.6;
+    margin-bottom: 18px;
+    min-height: 3em;
+  }
+  .judge-caption{ font-size:.68rem; color:var(--sub); margin-bottom:18px; }
+  .result-actions{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .result-actions .icon-btn{ padding: 12px; font-size: .85rem; }
+  .result-actions .big-btn{ margin-top: 0; padding: 14px 20px; font-size: 1rem; width: 100%; }
+
+  @media (max-width: 640px){
+    .palette{ width: 46px; }
+  }
+  @media (orientation: landscape) and (max-height: 480px){
+    .howto{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HOME SCREEN -->
+  <div id="home" class="screen active">
+    <div class="doodle-icon">🎤🖌️</div>
+    <h1>こえ描き</h1>
+    <p class="desc">声の高さでペンが動く、お絵かきゲーム</p>
+    <button class="big-btn" id="startBtn">はじめる</button>
+    <div id="homeMsg"></div>
+    <div class="howto">
+      <b>あそびかた</b><br>
+      ・ペンは自動で右へ進み続け、右端に着いたら左端からまた現れます。<br>
+      ・声の<b>高さ</b>でペンが<b>上下</b>します（高い声＝上、低い声＝下）。キャンバスの左右の半透明エリアは
+      塗れませんが、ここでも声の高さは反映されるので、スタート前から音程を合わせておけます。<br>
+      ・右下のボタンを<b>長押し</b>している間だけ色が塗られます。<br>
+      ・「⏸ 一時停止」でペンの動きを完全に止められます。<br>
+      ・「🔍 ズーム」でキャンバスを拡大すると、ペンの実速度はそのままに画面上ではゆっくり大きく動くので、
+      細かい部分も狙って描きやすくなります。<br>
+      ・描き終わったら右下の「完成」を押すと結果画面に切り替わり、判定と「次のお題へ」「タイトルへ戻る」が選べます。
+    </div>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="game" class="screen">
+    <div class="topbar">
+      <div class="topic-box">
+        <div class="label">お題</div>
+        <div class="value" id="pictureTopic">-</div>
+      </div>
+      <div class="icon-btn-row">
+        <button class="icon-btn" id="btnUndo">↺ 元に戻る</button>
+        <button class="icon-btn" id="btnClear">クリア</button>
+        <button class="icon-btn" id="btnSave">保存(PNG)</button>
+        <button class="icon-btn" id="btnShare">シェア</button>
+        <button class="icon-btn" id="btnReroll">お題チェンジ</button>
+        <button class="icon-btn" id="btnPause">⏸ 一時停止</button>
+        <button class="icon-btn" id="btnZoom">🔍 1x</button>
+        <button class="icon-btn" id="btnHome">ホームに戻る</button>
+      </div>
+    </div>
+
+    <div class="main-area">
+      <div class="canvas-area">
+        <div class="play-wrap" id="playWrap">
+          <div class="camera" id="camera">
+            <div class="side-zone" id="leftZone"></div>
+            <div class="canvas-wrap" id="canvasWrap">
+              <canvas id="drawCanvas"></canvas>
+            </div>
+            <div class="side-zone" id="rightZone"></div>
+          </div>
+          <canvas id="cursorCanvas"></canvas>
+          <div class="pitch-indicator" id="pitchBadge">--- Hz</div>
+        </div>
+      </div>
+      <div class="palette" id="palette"></div>
+    </div>
+
+    <div class="controls-row">
+      <label class="ctrl">ペンの速さ
+        <input type="range" id="speedSlider" min="80" max="600" step="20" value="260">
+      </label>
+      <label class="ctrl">ペンの太さ
+        <input type="range" id="widthSlider" min="2" max="30" step="1" value="6">
+      </label>
+      <label class="ctrl">声の感度（音域幅）
+        <input type="range" id="sensSlider" min="60" max="500" step="10" value="150">
+      </label>
+    </div>
+
+    <div class="bottombar">
+      <button id="mainBtn">スタート</button>
+      <button id="btnFinish">🏁<br>完成</button>
+    </div>
+
+  </div>
+
+  <!-- RESULT SCREEN -->
+  <div id="result" class="screen">
+    <div class="result-card">
+      <div class="result-title">完成！</div>
+      <div class="judge-label">お題</div>
+      <div class="judge-topic" id="judgeTopicLabel">-</div>
+      <div class="judge-percent" id="judgePercent">0%</div>
+      <div class="judge-persona">🐼 審査員パンダのコメント</div>
+      <div class="judge-comment" id="judgeComment"></div>
+      <div class="judge-caption">※お題ごとの典型的な形（縦横比・塗りの密度）との近さで採点する簡易判定です（本格的な画像認識AIではありません）</div>
+      <div class="result-actions">
+        <button class="icon-btn" id="btnResultSave">保存(PNG)</button>
+        <button class="icon-btn" id="btnResultHome">🏠 タイトルへ戻る</button>
+        <button class="big-btn" id="btnResultNext">🔄 次のお題へ</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------------------------------------------------
+  // DATA
+  // ---------------------------------------------------------
+  var PICTURE_TOPICS = [
+    "猫","犬","うさぎ","魚","鳥","富士山","太陽","月","星","花","木",
+    "りんご","バナナ","家","車","電車","船","ロケット","傘","帽子",
+    "時計","ハート","雪だるま","ケーキ","きのこ","カメ","ぞう","風船"
+  ];
+
+  // Each topic's typical silhouette, expressed as an expected bounding-box
+  // aspect ratio (width/height) and expected ink density within that box
+  // (0 = sparse/outline-like, 1 = solid blob). The judge compares the
+  // actual drawing's measured ratio/density against these to score how
+  // well its *shape* matches the topic -- not real object recognition,
+  // just a geometry-based approximation of it.
+  var TOPIC_PROFILES = {
+    "猫":     { ratio: 1.05, ratioTol: 0.55, fill: 0.50, fillTol: 0.35 },
+    "犬":     { ratio: 1.15, ratioTol: 0.55, fill: 0.48, fillTol: 0.35 },
+    "うさぎ": { ratio: 0.60, ratioTol: 0.45, fill: 0.42, fillTol: 0.35 },
+    "魚":     { ratio: 2.10, ratioTol: 0.70, fill: 0.50, fillTol: 0.35 },
+    "鳥":     { ratio: 1.30, ratioTol: 0.60, fill: 0.42, fillTol: 0.35 },
+    "富士山": { ratio: 1.80, ratioTol: 0.60, fill: 0.55, fillTol: 0.35 },
+    "太陽":   { ratio: 1.00, ratioTol: 0.45, fill: 0.55, fillTol: 0.35 },
+    "月":     { ratio: 1.00, ratioTol: 0.45, fill: 0.55, fillTol: 0.35 },
+    "星":     { ratio: 1.00, ratioTol: 0.45, fill: 0.32, fillTol: 0.30 },
+    "花":     { ratio: 1.00, ratioTol: 0.50, fill: 0.42, fillTol: 0.35 },
+    "木":     { ratio: 0.60, ratioTol: 0.45, fill: 0.40, fillTol: 0.35 },
+    "りんご": { ratio: 0.90, ratioTol: 0.40, fill: 0.60, fillTol: 0.35 },
+    "バナナ": { ratio: 2.00, ratioTol: 0.70, fill: 0.32, fillTol: 0.30 },
+    "家":     { ratio: 1.10, ratioTol: 0.50, fill: 0.55, fillTol: 0.35 },
+    "車":     { ratio: 2.00, ratioTol: 0.65, fill: 0.50, fillTol: 0.35 },
+    "電車":   { ratio: 2.80, ratioTol: 0.80, fill: 0.50, fillTol: 0.35 },
+    "船":     { ratio: 1.80, ratioTol: 0.65, fill: 0.42, fillTol: 0.35 },
+    "ロケット": { ratio: 0.42, ratioTol: 0.35, fill: 0.42, fillTol: 0.35 },
+    "傘":     { ratio: 1.10, ratioTol: 0.50, fill: 0.48, fillTol: 0.35 },
+    "帽子":   { ratio: 1.60, ratioTol: 0.60, fill: 0.42, fillTol: 0.35 },
+    "時計":   { ratio: 1.00, ratioTol: 0.45, fill: 0.58, fillTol: 0.35 },
+    "ハート": { ratio: 1.00, ratioTol: 0.45, fill: 0.42, fillTol: 0.35 },
+    "雪だるま": { ratio: 0.55, ratioTol: 0.40, fill: 0.52, fillTol: 0.35 },
+    "ケーキ": { ratio: 1.30, ratioTol: 0.55, fill: 0.52, fillTol: 0.35 },
+    "きのこ": { ratio: 0.85, ratioTol: 0.45, fill: 0.42, fillTol: 0.35 },
+    "カメ":   { ratio: 1.60, ratioTol: 0.55, fill: 0.48, fillTol: 0.35 },
+    "ぞう":   { ratio: 1.50, ratioTol: 0.55, fill: 0.48, fillTol: 0.35 },
+    "風船":   { ratio: 0.75, ratioTol: 0.45, fill: 0.58, fillTol: 0.35 }
+  };
+
+  var COLORS = [
+    "#111111", "#e53935", "#fb8c00", "#fdd835", "#43a047",
+    "#1e88e5", "#8e24aa", "#ec407a", "#ffffff", "#6d4c41"
+  ];
+
+  var JUDGE_COMMENTS = [
+    { max: 9, lines: [
+        "これは…前衛芸術ですか？お題を忘れていませんか？",
+        "キャンバスが困惑しています。",
+        "自由すぎる解釈、審査員も理解が追いつきません。"
+    ]},
+    { max: 29, lines: [
+        "がんばりは伝わってきます（お題は伝わってきません）。",
+        "何かが描かれていることだけは分かります。",
+        "抽象的すぎて逆に才能を感じます。"
+    ]},
+    { max: 54, lines: [
+        "言われてみれば…見えなくもない…かも？",
+        "愛はあるが、技術がもう少し追いついてほしいところ。",
+        "声はよく出ていました。絵はさておき。"
+    ]},
+    { max: 74, lines: [
+        "なかなかやるじゃないですか。",
+        "お題の面影がしっかり残っています。",
+        "この調子で声をもっと張ってみましょう。"
+    ]},
+    { max: 89, lines: [
+        "おお、ちゃんとそれっぽく見えます！やればできる子。",
+        "声の高さコントロール、板についてきましたね。",
+        "友達に見せたくなる出来です。"
+    ]},
+    { max: 99, lines: [
+        "見事です。ペンが迷子にならなかったようで何より。",
+        "ほぼ完璧…にしては手が震えていましたね？",
+        "これは上位入賞レベル。ただし声は枯れたのでは？"
+    ]},
+    { max: 100, lines: [
+        "満点です。奇跡が起きました。",
+        "100%…本当に声だけで描いたんですか？",
+        "完璧すぎて逆に怖いです。"
+    ]}
+  ];
+
+  // ---------------------------------------------------------
+  // STATE
+  // ---------------------------------------------------------
+  var state = {
+    screen: "home",
+    gameState: "ready", // ready | playing
+    currentColor: COLORS[0],
+    penX: 0, penY: 0,
+    lastPenY: null,
+    speedX: 260, // px per second
+    lineWidth: 6,
+    isDrawing: false, // is the button currently pressed
+    paused: false,
+    zoom: 1,
+    lastFrameTime: null,
+    animId: null,
+    audioCtx: null,
+    analyser: null,
+    micStream: null,
+    micSource: null,
+    pitchBuf: null,
+    pitchHistory: [],
+    smoothedPitch: null,
+    lastGoodY: null,
+    centerHz: 175,
+    rangeHz: 150,
+    canvasCssW: 0,
+    canvasCssH: 0,
+    playCssW: 0,
+    sideZoneW: 0,
+    showTopicOnSave: true,
+    undoStack: []
+  };
+
+  var UNDO_LIMIT = 12;
+
+  // ---------------------------------------------------------
+  // DOM
+  // ---------------------------------------------------------
+  var $home = document.getElementById("home");
+  var $game = document.getElementById("game");
+  var $result = document.getElementById("result");
+  var $startBtn = document.getElementById("startBtn");
+  var $homeMsg = document.getElementById("homeMsg");
+
+  var $pictureTopic = document.getElementById("pictureTopic");
+  var $mainBtn = document.getElementById("mainBtn");
+  var $palette = document.getElementById("palette");
+  var $playWrap = document.getElementById("playWrap");
+  var $camera = document.getElementById("camera");
+  var $leftZone = document.getElementById("leftZone");
+  var $rightZone = document.getElementById("rightZone");
+  var $canvasWrap = document.getElementById("canvasWrap");
+  var $canvas = document.getElementById("drawCanvas");
+  var ctx = $canvas.getContext("2d", { willReadFrequently: true });
+  var $cursorCanvas = document.getElementById("cursorCanvas");
+  var cctx = $cursorCanvas.getContext("2d");
+  var $pitchBadge = document.getElementById("pitchBadge");
+
+  var $speedSlider = document.getElementById("speedSlider");
+  var $widthSlider = document.getElementById("widthSlider");
+  var $sensSlider = document.getElementById("sensSlider");
+  var $btnPause = document.getElementById("btnPause");
+  var $btnZoom = document.getElementById("btnZoom");
+
+  var $btnUndo = document.getElementById("btnUndo");
+  var $btnClear = document.getElementById("btnClear");
+  var $btnFinish = document.getElementById("btnFinish");
+  var $btnSave = document.getElementById("btnSave");
+  var $btnShare = document.getElementById("btnShare");
+  var $btnReroll = document.getElementById("btnReroll");
+  var $btnHome = document.getElementById("btnHome");
+
+  var $judgeTopicLabel = document.getElementById("judgeTopicLabel");
+  var $judgePercent = document.getElementById("judgePercent");
+  var $judgeComment = document.getElementById("judgeComment");
+  var $btnResultSave = document.getElementById("btnResultSave");
+  var $btnResultHome = document.getElementById("btnResultHome");
+  var $btnResultNext = document.getElementById("btnResultNext");
+
+  var $customColorInput = null;
+
+  // ---------------------------------------------------------
+  // UTIL
+  // ---------------------------------------------------------
+  function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+
+  function showScreen(name){
+    state.screen = name;
+    $home.classList.toggle("active", name === "home");
+    $game.classList.toggle("active", name === "game");
+    $result.classList.toggle("active", name === "result");
+  }
+
+  // ---------------------------------------------------------
+  // PALETTE
+  // ---------------------------------------------------------
+  function selectColor(c){
+    state.currentColor = c;
+    updatePaletteSelection();
+  }
+
+  function updatePaletteSelection(){
+    Array.prototype.forEach.call($palette.querySelectorAll(".swatch[data-color]"), function(el){
+      el.classList.toggle("selected", el.dataset.color.toLowerCase() === state.currentColor.toLowerCase());
+    });
+    if ($customColorInput){
+      var isPreset = COLORS.some(function(c){ return c.toLowerCase() === state.currentColor.toLowerCase(); });
+      $customColorInput.classList.toggle("selected", !isPreset);
+      if (!isPreset && $customColorInput.value.toLowerCase() !== state.currentColor.toLowerCase()){
+        $customColorInput.value = state.currentColor;
+      }
+    }
+  }
+
+  function buildPalette(){
+    $palette.innerHTML = "";
+    COLORS.forEach(function(c){
+      var sw = document.createElement("div");
+      sw.className = "swatch";
+      sw.style.background = c;
+      sw.dataset.color = c;
+      sw.addEventListener("pointerdown", function(e){
+        e.preventDefault();
+        selectColor(c);
+      });
+      $palette.appendChild(sw);
+    });
+
+    var custom = document.createElement("input");
+    custom.type = "color";
+    custom.className = "swatch custom-swatch";
+    custom.title = "自由に色を選ぶ（RGB無限）";
+    custom.value = /^#[0-9a-f]{6}$/i.test(state.currentColor) ? state.currentColor : "#00c2a8";
+    custom.addEventListener("input", function(){
+      selectColor(custom.value.toLowerCase());
+    });
+    $palette.appendChild(custom);
+    $customColorInput = custom;
+
+    updatePaletteSelection();
+  }
+
+  // ---------------------------------------------------------
+  // CANVAS SIZING
+  // ---------------------------------------------------------
+  // The play area is a square drawable canvas flanked by two translucent
+  // "pitch warm-up" zones (left/right) that the pen also travels through --
+  // you can see it coming and line up your voice, but ink only lays down
+  // once the pen is actually over the square canvas.
+  var SIDE_ZONE_RATIO = 0.15;
+
+  function resizeCanvas(){
+    state.undoStack = []; // stale after a resize (dimensions changed)
+
+    var area = document.querySelector(".canvas-area");
+    var areaRect = area.getBoundingClientRect();
+    var totalWidthFactor = 1 + SIDE_ZONE_RATIO * 2;
+    var square = Math.max(40, Math.floor(Math.min(areaRect.height, areaRect.width / totalWidthFactor)));
+    var sideZoneW = Math.floor(square * SIDE_ZONE_RATIO);
+
+    $playWrap.style.width = (square + sideZoneW * 2) + "px";
+    $playWrap.style.height = square + "px";
+    $leftZone.style.width = sideZoneW + "px";
+    $rightZone.style.width = sideZoneW + "px";
+    $canvasWrap.style.width = square + "px";
+    $canvasWrap.style.height = square + "px";
+
+    var rect = $canvasWrap.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+
+    // Preserve drawing by copying old content
+    var old = null;
+    if ($canvas.width > 0 && $canvas.height > 0){
+      old = document.createElement("canvas");
+      old.width = $canvas.width;
+      old.height = $canvas.height;
+      old.getContext("2d").drawImage($canvas, 0, 0);
+    }
+
+    state.canvasCssW = Math.max(1, Math.floor(rect.width));
+    state.canvasCssH = Math.max(1, Math.floor(rect.height));
+    state.sideZoneW = sideZoneW;
+    state.playCssW = state.canvasCssW + sideZoneW * 2;
+    $canvas.width = Math.floor(state.canvasCssW * dpr);
+    $canvas.height = Math.floor(state.canvasCssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, state.canvasCssW, state.canvasCssH);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (old){
+      ctx.drawImage(old, 0, 0, old.width, old.height, 0, 0, state.canvasCssW, state.canvasCssH);
+    }
+
+    // the cursor overlay spans the *entire* play area (zones + canvas),
+    // since the pen is visible while passing through the side zones too
+    $cursorCanvas.width = Math.floor(state.playCssW * dpr);
+    $cursorCanvas.height = Math.floor(state.canvasCssH * dpr);
+    cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // clamp pen position
+    if (state.penX === 0 && state.penY === 0){
+      state.penX = 10;
+      state.penY = state.canvasCssH / 2;
+    } else {
+      state.penX = Math.min(state.penX, state.playCssW - 10);
+      state.penY = Math.min(Math.max(state.penY, 10), state.canvasCssH - 10);
+    }
+  }
+
+  function clearCanvas(){
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, $canvas.width, $canvas.height);
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------
+  // UNDO
+  // ---------------------------------------------------------
+  function pushUndoSnapshot(){
+    try {
+      var snap = ctx.getImageData(0, 0, $canvas.width, $canvas.height);
+      state.undoStack.push(snap);
+      if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
+    } catch(e){ /* ignore */ }
+  }
+
+  function undoLast(){
+    if (state.undoStack.length === 0) return;
+    var snap = state.undoStack.pop();
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.putImageData(snap, 0, 0);
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------
+  // TOPIC
+  // ---------------------------------------------------------
+  function rerollTopic(){
+    var t = pick(PICTURE_TOPICS);
+    state.currentPicture = t;
+    $pictureTopic.textContent = "お題：" + t;
+  }
+
+  // ---------------------------------------------------------
+  // AUDIO / PITCH DETECTION
+  // ---------------------------------------------------------
+  function initAudio(){
+    return navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    }).then(function(stream){
+      state.micStream = stream;
+      var AC = window.AudioContext || window.webkitAudioContext;
+      state.audioCtx = new AC();
+      var source = state.audioCtx.createMediaStreamSource(stream);
+      var analyser = state.audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0;
+      source.connect(analyser);
+      // Keep a persistent reference to the source node -- some browsers
+      // garbage-collect a MediaStreamAudioSourceNode that isn't connected
+      // all the way to the destination if nothing in JS still references
+      // it, which silently kills pitch detection after a while.
+      state.micSource = source;
+      state.analyser = analyser;
+      state.pitchBuf = new Float32Array(analyser.fftSize);
+      return true;
+    });
+  }
+
+  function resumeAudioIfNeeded(){
+    if (state.audioCtx && state.audioCtx.state === "suspended"){
+      state.audioCtx.resume();
+    }
+  }
+
+  // Autocorrelation-based pitch detection
+  function detectPitch(buf, sampleRate){
+    var SIZE = buf.length;
+
+    // RMS for silence gate
+    var rms = 0;
+    for (var i = 0; i < SIZE; i++){
+      rms += buf[i] * buf[i];
+    }
+    rms = Math.sqrt(rms / SIZE);
+    if (rms < 0.01){
+      return null; // silence
+    }
+
+    var minHz = 60, maxHz = 1000;
+    var maxLag = Math.floor(sampleRate / minHz);
+    var minLag = Math.floor(sampleRate / maxHz);
+    maxLag = Math.min(maxLag, SIZE - 1);
+
+    // remove DC offset
+    var mean = 0;
+    for (i = 0; i < SIZE; i++) mean += buf[i];
+    mean /= SIZE;
+
+    var c = new Float32Array(maxLag + 1);
+    for (var lag = minLag; lag <= maxLag; lag++){
+      var sum = 0;
+      for (i = 0; i < SIZE - lag; i++){
+        sum += (buf[i] - mean) * (buf[i + lag] - mean);
+      }
+      c[lag] = sum;
+    }
+
+    // find the highest peak
+    var bestLag = -1;
+    var bestVal = -Infinity;
+    for (lag = minLag + 1; lag < maxLag; lag++){
+      if (c[lag] > bestVal){
+        bestVal = c[lag];
+        bestLag = lag;
+      }
+    }
+
+    if (bestLag <= 0 || bestVal <= 0) return null;
+
+    // parabolic interpolation for sub-sample precision
+    var x0 = bestLag > minLag ? c[bestLag - 1] : c[bestLag];
+    var x1 = c[bestLag];
+    var x2 = bestLag < maxLag ? c[bestLag + 1] : c[bestLag];
+    var denom = (x0 - 2 * x1 + x2);
+    var shift = 0;
+    if (denom !== 0) shift = 0.5 * (x0 - x2) / denom;
+    var refinedLag = bestLag + shift;
+    if (refinedLag <= 0) return null;
+
+    var freq = sampleRate / refinedLag;
+    if (freq < minHz || freq > maxHz) return null;
+    return freq;
+  }
+
+  function medianOf(arr){
+    var a = arr.slice().sort(function(x,y){ return x - y; });
+    var mid = Math.floor(a.length / 2);
+    if (a.length % 2 === 0) return (a[mid - 1] + a[mid]) / 2;
+    return a[mid];
+  }
+
+  var MAX_HISTORY = 7;
+  var MAX_JUMP_HZ_PER_FRAME = 60;
+
+  function updatePitch(){
+    if (!state.analyser) return;
+    state.analyser.getFloatTimeDomainData(state.pitchBuf);
+    var freq = detectPitch(state.pitchBuf, state.audioCtx.sampleRate);
+
+    if (freq === null){
+      $pitchBadge.textContent = "--- Hz";
+      return;
+    }
+
+    if (state.smoothedPitch !== null){
+      var diff = freq - state.smoothedPitch;
+      if (Math.abs(diff) > MAX_JUMP_HZ_PER_FRAME){
+        freq = state.smoothedPitch + Math.sign(diff) * MAX_JUMP_HZ_PER_FRAME;
+      }
+    }
+
+    state.pitchHistory.push(freq);
+    if (state.pitchHistory.length > MAX_HISTORY) state.pitchHistory.shift();
+
+    var med = medianOf(state.pitchHistory);
+    if (state.smoothedPitch === null){
+      state.smoothedPitch = med;
+    } else {
+      state.smoothedPitch = state.smoothedPitch * 0.7 + med * 0.3;
+    }
+
+    $pitchBadge.textContent = Math.round(state.smoothedPitch) + " Hz";
+
+    // map to Y using log scale
+    var lo = state.centerHz - state.rangeHz / 2;
+    var hi = state.centerHz + state.rangeHz / 2;
+    lo = Math.max(40, lo);
+    hi = Math.max(lo + 10, hi);
+
+    var p = state.smoothedPitch;
+    var clamped = Math.min(Math.max(p, lo), hi);
+    var logLo = Math.log2(lo);
+    var logHi = Math.log2(hi);
+    var logP = Math.log2(clamped);
+    var t = (logP - logLo) / (logHi - logLo);
+
+    var margin = 16;
+    var yRange = state.canvasCssH - margin * 2;
+    var targetY = margin + (1 - t) * yRange;
+
+    state.lastGoodY = targetY;
+  }
+
+  // ---------------------------------------------------------
+  // GAME LOOP
+  // ---------------------------------------------------------
+  function step(ts){
+    if (state.lastFrameTime === null) state.lastFrameTime = ts;
+    var dt = (ts - state.lastFrameTime) / 1000;
+    dt = Math.min(dt, 0.05);
+    state.lastFrameTime = ts;
+
+    if (!state.paused){
+      // vertical from pitch (or hold last) runs continuously -- even
+      // before スタート is pressed -- so you can line up your voice ahead
+      // of time. Horizontal movement only happens once gameState is
+      // "playing".
+      updatePitch();
+
+      var newY = state.lastGoodY !== null ? state.lastGoodY : state.penY;
+      if (state.lastPenY === null) state.lastPenY = newY;
+      var eased = state.lastPenY + (newY - state.lastPenY) * Math.min(1, dt * 10);
+      state.lastPenY = eased;
+      state.penY = eased;
+
+      if (state.gameState === "playing"){
+        // horizontal: always moves right across the whole play area (side
+        // zones + canvas), wraps back to the left edge forever
+        var w = state.playCssW;
+        var margin = 10;
+        var wrapped = false;
+        state.penX += state.speedX * dt;
+        if (state.penX >= w - margin){
+          state.penX = margin;
+          wrapped = true;
+        }
+
+        // only ink the canvas when both the previous and current point are
+        // actually over the drawable square (not the side zones)
+        var localX = state.penX - state.sideZoneW;
+        var prevLocalX = state.prevPenX - state.sideZoneW;
+        var overCanvasNow = localX >= 0 && localX <= state.canvasCssW;
+        var overCanvasPrev = prevLocalX >= 0 && prevLocalX <= state.canvasCssW;
+
+        if (state.isDrawing && !wrapped && overCanvasNow && overCanvasPrev){
+          drawSegment(prevLocalX, state.prevPenY, localX, state.penY);
+        }
+      }
+      state.prevPenX = state.penX;
+      state.prevPenY = state.penY;
+    }
+
+    updateCamera();
+    drawCursorOverlay();
+    state.animId = requestAnimationFrame(step);
+  }
+
+  function drawSegment(x0, y0, x1, y1){
+    if (x0 === undefined || y0 === undefined) return;
+    ctx.strokeStyle = state.currentColor;
+    ctx.lineWidth = state.lineWidth;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  }
+
+  // Applies the zoom/pan transform to Layer 1 (the "world": canvas + side
+  // scenery, .camera) so it keeps the pen centered in the viewport. Layer 2
+  // (the pen, #cursorCanvas) is never scaled by this -- see drawCursorOverlay.
+  function updateCamera(){
+    if (state.zoom <= 1){
+      $camera.style.transform = "";
+      return;
+    }
+    var z = state.zoom;
+    var tx = state.playCssW / (2 * z) - state.penX;
+    var ty = state.canvasCssH / (2 * z) - state.penY;
+    $camera.style.transform = "scale(" + z + ") translate(" + tx + "px, " + ty + "px)";
+  }
+
+  // The pen cursor is drawn on a separate transparent overlay canvas stacked
+  // above the drawing canvas (spanning the full play area, side zones
+  // included), so it never gets baked into the saved artwork. It is Layer 2
+  // and is never scaled by zoom -- while zoomed, the camera pans Layer 1
+  // underneath it, so the pen itself just sits pinned at the viewport
+  // center, always drawn at its normal, un-magnified size.
+  function drawCursorOverlay(){
+    cctx.clearRect(0, 0, state.playCssW, state.canvasCssH);
+
+    var cx, cy;
+    if (state.zoom > 1){
+      cx = state.playCssW / 2;
+      cy = state.canvasCssH / 2;
+    } else {
+      cx = state.penX;
+      cy = state.penY;
+    }
+    cctx.save();
+    cctx.translate(cx, cy);
+    cctx.rotate(Math.PI / 5.5);
+
+    if (state.isDrawing){
+      cctx.beginPath();
+      cctx.arc(0, 0, 5 + state.lineWidth * 0.4, 0, Math.PI * 2);
+      cctx.fillStyle = state.currentColor;
+      cctx.globalAlpha = 0.35;
+      cctx.fill();
+      cctx.globalAlpha = 1;
+    }
+
+    var bodyHalfW = 4.5;
+    var shaftTopY = -40;
+    var shaftBottomY = -11;
+    cctx.beginPath();
+    cctx.moveTo(-bodyHalfW, shaftBottomY);
+    cctx.lineTo(-bodyHalfW, shaftTopY + 5);
+    cctx.quadraticCurveTo(-bodyHalfW, shaftTopY, 0, shaftTopY);
+    cctx.quadraticCurveTo(bodyHalfW, shaftTopY, bodyHalfW, shaftTopY + 5);
+    cctx.lineTo(bodyHalfW, shaftBottomY);
+    cctx.closePath();
+    cctx.fillStyle = "#3a3f4d";
+    cctx.fill();
+    cctx.lineWidth = 1;
+    cctx.strokeStyle = "#1c1f28";
+    cctx.stroke();
+
+    cctx.beginPath();
+    cctx.rect(-bodyHalfW, shaftBottomY - 9, bodyHalfW * 2, 9);
+    cctx.fillStyle = state.currentColor;
+    cctx.fill();
+    cctx.strokeStyle = "#1c1f28";
+    cctx.stroke();
+
+    cctx.beginPath();
+    cctx.moveTo(0, 0);
+    cctx.lineTo(-3, shaftBottomY);
+    cctx.lineTo(3, shaftBottomY);
+    cctx.closePath();
+    cctx.fillStyle = state.isDrawing ? "#d8d8d8" : "#9aa0b4";
+    cctx.fill();
+    cctx.lineWidth = 1;
+    cctx.strokeStyle = "#1c1f28";
+    cctx.stroke();
+
+    cctx.restore();
+  }
+
+  function startLoop(){
+    if (state.animId === null){
+      state.lastFrameTime = null;
+      state.animId = requestAnimationFrame(step);
+    }
+  }
+
+  // Resets the pen to its resting position: the very start of the left
+  // warm-up zone, vertically centered.
+  function resetPenToStart(){
+    state.penX = 10;
+    state.penY = state.canvasCssH / 2;
+    state.prevPenX = state.penX;
+    state.prevPenY = state.penY;
+    state.lastPenY = state.penY;
+    state.lastGoodY = state.penY;
+  }
+
+  // ---------------------------------------------------------
+  // MAIN BUTTON
+  // ---------------------------------------------------------
+  function onMainDown(e){
+    e.preventDefault();
+    resumeAudioIfNeeded();
+    if (state.gameState === "ready"){
+      state.gameState = "playing";
+      $mainBtn.textContent = "描く";
+      $mainBtn.classList.add("drawing-mode");
+      // only snap X back to the left edge -- keep the Y position (and its
+      // pitch smoothing) so any pre-start pitch warm-up isn't thrown away
+      state.penX = 10;
+      state.prevPenX = state.penX;
+      state.prevPenY = state.penY;
+      startLoop();
+    } else {
+      pushUndoSnapshot();
+      state.isDrawing = true;
+      $mainBtn.classList.add("active-press");
+    }
+  }
+
+  function onMainUp(e){
+    if (e) e.preventDefault();
+    if (state.gameState === "playing"){
+      state.isDrawing = false;
+      $mainBtn.classList.remove("active-press");
+    }
+  }
+
+  $mainBtn.addEventListener("pointerdown", onMainDown);
+  window.addEventListener("pointerup", onMainUp);
+  $mainBtn.addEventListener("pointercancel", onMainUp);
+  $mainBtn.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+
+  // ---------------------------------------------------------
+  // UNDO / CLEAR
+  // ---------------------------------------------------------
+  $btnUndo.addEventListener("click", function(){
+    undoLast();
+  });
+
+  $btnClear.addEventListener("click", function(){
+    pushUndoSnapshot();
+    clearCanvas();
+  });
+
+  // ---------------------------------------------------------
+  // SAVE / SHARE
+  // ---------------------------------------------------------
+  function buildSaveCanvas(){
+    var dpr = window.devicePixelRatio || 1;
+    var out = document.createElement("canvas");
+    out.width = $canvas.width;
+    out.height = $canvas.height;
+    var octx = out.getContext("2d");
+    octx.drawImage($canvas, 0, 0);
+
+    if (state.showTopicOnSave && $pictureTopic.textContent){
+      var fontSize = 16 * dpr;
+      octx.font = "bold " + fontSize + "px sans-serif";
+      var label = $pictureTopic.textContent;
+      var padding = 8 * dpr;
+      var textW = octx.measureText(label).width;
+      var boxW = textW + padding * 2;
+      var boxH = fontSize + padding * 1.4;
+      var x = out.width - boxW - 10 * dpr;
+      var y = out.height - boxH - 10 * dpr;
+      octx.fillStyle = "rgba(0,0,0,0.55)";
+      octx.fillRect(x, y, boxW, boxH);
+      octx.fillStyle = "#ffffff";
+      octx.textBaseline = "middle";
+      octx.fillText(label, x + padding, y + boxH / 2 + 1);
+    }
+    return out;
+  }
+
+  function timestampStr(){
+    var d = new Date();
+    function p(n){ return (n < 10 ? "0" : "") + n; }
+    return d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + "_" + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+
+  function downloadPng(){
+    var out = buildSaveCanvas();
+    var link = document.createElement("a");
+    link.download = "koeegaki_" + timestampStr() + ".png";
+    link.href = out.toDataURL("image/png");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  $btnSave.addEventListener("click", downloadPng);
+  $btnResultSave.addEventListener("click", downloadPng);
+
+  $btnShare.addEventListener("click", function(){
+    var out = buildSaveCanvas();
+    out.toBlob(function(blob){
+      if (!blob) return;
+      var file = new File([blob], "koeegaki_" + timestampStr() + ".png", { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })){
+        navigator.share({
+          files: [file],
+          title: "こえ描き",
+          text: $pictureTopic.textContent + " を声で描いてみた！"
+        }).catch(function(){ /* user cancelled or failed, ignore */ });
+      } else {
+        downloadPng();
+      }
+    }, "image/png");
+  });
+
+  $btnReroll.addEventListener("click", function(){
+    rerollTopic();
+  });
+
+  $btnHome.addEventListener("click", function(){
+    goHome();
+  });
+
+  function goHome(){
+    state.gameState = "ready";
+    state.isDrawing = false;
+    state.paused = false;
+    state.zoom = 1;
+    if (state.animId !== null){
+      cancelAnimationFrame(state.animId);
+      state.animId = null;
+    }
+    $mainBtn.textContent = "スタート";
+    $mainBtn.classList.remove("drawing-mode", "active-press");
+    $btnPause.textContent = "⏸ 一時停止";
+    $btnZoom.textContent = "🔍 1x";
+    updateCamera();
+    showScreen("home");
+  }
+
+  // ---------------------------------------------------------
+  // SETTINGS: SPEED / LINE WIDTH / SENSITIVITY
+  // ---------------------------------------------------------
+  $speedSlider.addEventListener("input", function(){
+    state.speedX = parseInt($speedSlider.value, 10);
+  });
+  $widthSlider.addEventListener("input", function(){
+    state.lineWidth = parseInt($widthSlider.value, 10);
+  });
+  $sensSlider.addEventListener("input", function(){
+    state.rangeHz = parseInt($sensSlider.value, 10);
+  });
+
+  // ---------------------------------------------------------
+  // PAUSE (freezes the pen completely -- horizontal AND vertical/pitch)
+  // ---------------------------------------------------------
+  $btnPause.addEventListener("click", function(){
+    state.paused = !state.paused;
+    $btnPause.textContent = state.paused ? "▶ 再開" : "⏸ 一時停止";
+    if (state.paused){
+      state.isDrawing = false;
+      $mainBtn.classList.remove("active-press");
+    }
+  });
+
+  // ---------------------------------------------------------
+  // ZOOM (magnifies Layer 1 / the canvas so the same real pen speed covers
+  // proportionally less of the visible area -- lets you draw finer detail)
+  // ---------------------------------------------------------
+  var ZOOM_LEVELS = [1, 2, 3];
+  $btnZoom.addEventListener("click", function(){
+    var idx = ZOOM_LEVELS.indexOf(state.zoom);
+    state.zoom = ZOOM_LEVELS[(idx + 1) % ZOOM_LEVELS.length];
+    $btnZoom.textContent = "🔍 " + state.zoom + "x";
+    updateCamera();
+    drawCursorOverlay();
+  });
+
+  // ---------------------------------------------------------
+  // JUDGE (heuristic "how close to the topic" percentage + snarky comment)
+  // ---------------------------------------------------------
+  function pickComment(score){
+    for (var i = 0; i < JUDGE_COMMENTS.length; i++){
+      if (score <= JUDGE_COMMENTS[i].max) return pick(JUDGE_COMMENTS[i].lines);
+    }
+    return pick(JUDGE_COMMENTS[JUDGE_COMMENTS.length - 1].lines);
+  }
+
+  // Scores the actual ink on the canvas against the expected silhouette
+  // (aspect ratio + fill density) for the current topic. This is a
+  // geometry-based approximation, not real object recognition -- it can't
+  // know if the drawing actually "looks like" a cat, only whether its
+  // proportions and density resemble what a cat-shaped doodle tends to have.
+  function judgeDrawing(){
+    var w = $canvas.width, h = $canvas.height;
+    var score;
+    try {
+      var data = ctx.getImageData(0, 0, w, h).data;
+      var stride = 16; // sample every 4th pixel (4 bytes * 4)
+      var sampleCount = 0, painted = 0;
+      var buckets = {};
+      var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (var i = 0; i < data.length; i += stride){
+        sampleCount++;
+        var r = data[i], g = data[i + 1], b = data[i + 2];
+        if (!(r > 245 && g > 245 && b > 245)){
+          painted++;
+          var key = (r >> 5) + "_" + (g >> 5) + "_" + (b >> 5);
+          buckets[key] = true;
+          var pixelIndex = i / 4;
+          var px = pixelIndex % w;
+          var py = Math.floor(pixelIndex / w);
+          if (px < minX) minX = px;
+          if (px > maxX) maxX = px;
+          if (py < minY) minY = py;
+          if (py > maxY) maxY = py;
+        }
+      }
+      var coverage = sampleCount > 0 ? painted / sampleCount : 0;
+      var variety = Object.keys(buckets).length;
+
+      if (coverage < 0.008 || !isFinite(minX)){
+        score = Math.round(coverage * 300); // essentially blank canvas
+      } else {
+        var bboxW = Math.max(1, maxX - minX + 1);
+        var bboxH = Math.max(1, maxY - minY + 1);
+        var ratio = bboxW / bboxH;
+
+        // fill density within the bounding box, estimated from sampled pixels
+        // that fall inside it relative to the box's share of the canvas
+        var bboxAreaFraction = (bboxW * bboxH) / (w * h);
+        var fillDensity = bboxAreaFraction > 0 ? Math.min(1, coverage / bboxAreaFraction) : 0;
+
+        var profile = TOPIC_PROFILES[state.currentPicture] || { ratio: 1, ratioTol: 0.6, fill: 0.5, fillTol: 0.4 };
+
+        var ratioDiff = Math.abs(Math.log(ratio) - Math.log(profile.ratio));
+        var ratioScore = Math.max(0, 1 - ratioDiff / profile.ratioTol);
+        var fillDiff = Math.abs(fillDensity - profile.fill);
+        var fillScore = Math.max(0, 1 - fillDiff / profile.fillTol);
+        var shapeScore = ratioScore * 0.7 + fillScore * 0.3;
+
+        var coverageScore = Math.min(coverage / 0.12, 1);
+        var varietyScore = Math.min(variety / 6, 1);
+
+        var total = shapeScore * 62 + coverageScore * 23 + varietyScore * 8;
+        var jitter = Math.random() * 8 - 3; // small, so the score stays honest
+        score = Math.round(total + 7 + jitter);
+      }
+    } catch(e){
+      score = Math.floor(Math.random() * 30) + 20;
+    }
+    score = Math.max(0, Math.min(100, score));
+    showResultScreen(score);
+  }
+
+  // Pauses the pen and switches to a dedicated full-screen result view
+  // (instead of a modal) showing the score and the panda's comment.
+  function showResultScreen(score){
+    state.isDrawing = false;
+    if (state.animId !== null){
+      cancelAnimationFrame(state.animId);
+      state.animId = null;
+    }
+    $judgeTopicLabel.textContent = $pictureTopic.textContent;
+    $judgePercent.textContent = score + "%";
+    $judgeComment.textContent = pickComment(score);
+    showScreen("result");
+  }
+
+  $btnFinish.addEventListener("click", judgeDrawing);
+  $btnResultHome.addEventListener("click", function(){
+    goHome();
+  });
+  $btnResultNext.addEventListener("click", function(){
+    startNextRound();
+  });
+
+  // ---------------------------------------------------------
+  // START FLOW
+  // ---------------------------------------------------------
+  function enterGameScreen(){
+    buildPalette();
+    showScreen("game");
+    state.zoom = 1;
+    $btnZoom.textContent = "🔍 1x";
+    requestAnimationFrame(function(){
+      resizeCanvas();
+      clearCanvas();
+      rerollTopic();
+      resetPenToStart();
+      updateCamera();
+      drawCursorOverlay();
+      // the loop runs from the moment the game screen appears, so the pen
+      // already tracks pitch (vertically) before スタート is pressed
+      startLoop();
+    });
+    resumeAudioIfNeeded();
+  }
+
+  // Starts a fresh round from the result screen: new topic, blank canvas,
+  // back to the "ready" (press スタート) state.
+  function startNextRound(){
+    state.gameState = "ready";
+    state.isDrawing = false;
+    state.paused = false;
+    state.zoom = 1;
+    $mainBtn.textContent = "スタート";
+    $mainBtn.classList.remove("drawing-mode", "active-press");
+    $btnPause.textContent = "⏸ 一時停止";
+    $btnZoom.textContent = "🔍 1x";
+    showScreen("game");
+    requestAnimationFrame(function(){
+      resizeCanvas();
+      clearCanvas();
+      rerollTopic();
+      resetPenToStart();
+      updateCamera();
+      drawCursorOverlay();
+      startLoop();
+    });
+    resumeAudioIfNeeded();
+  }
+
+  $startBtn.addEventListener("click", function(){
+    $homeMsg.textContent = "";
+
+    // Reuse the existing mic stream/AudioContext across repeated
+    // ホームに戻る -> はじめる cycles instead of leaking a new one each time.
+    if (state.audioCtx){
+      enterGameScreen();
+      return;
+    }
+
+    $startBtn.disabled = true;
+    $startBtn.textContent = "マイク準備中...";
+
+    initAudio().then(function(){
+      $startBtn.disabled = false;
+      $startBtn.textContent = "はじめる";
+      enterGameScreen();
+    }).catch(function(err){
+      $startBtn.disabled = false;
+      $startBtn.textContent = "はじめる";
+      $homeMsg.textContent = "マイクの使用が許可されませんでした。ブラウザの設定でマイクへのアクセスを許可してから、もう一度お試しください。（Safariの場合は「設定」→「Safari」→「マイク」を確認）";
+      console.error(err);
+    });
+  });
+
+  function handleResize(){
+    if (state.screen === "game"){
+      resizeCanvas();
+      updateCamera();
+      if (state.gameState !== "playing"){
+        drawCursorOverlay();
+      }
+    }
+  }
+
+  window.addEventListener("resize", handleResize);
+
+  // Handle iOS viewport changes / orientation
+  window.addEventListener("orientationchange", function(){
+    setTimeout(handleResize, 300);
+  });
+
+})();
+</script>
+</body>
+</html>
