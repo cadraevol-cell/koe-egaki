@@ -467,7 +467,7 @@
         <button class="icon-btn" id="btnReroll">お題チェンジ</button>
         <button class="icon-btn" id="btnPause">⏸ 一時停止</button>
         <button class="icon-btn" id="btnZoom">🔍 1.0x</button>
-        <button class="icon-btn" id="btnTrace">📝 なぞーる: OFF</button>
+        <button class="icon-btn" id="btnTrace">📝 なぞーる: ON</button>
         <button class="icon-btn" id="btnHome">ホームに戻る</button>
       </div>
     </div>
@@ -554,7 +554,10 @@
   // couple of forgiving elongated curves (banana, fish) and a scribble-
   // friendly star, and drops the circle-heavy topics entirely.
   var PICTURE_TOPICS = [
-    "富士山","家","ケーキ","帽子","傘","木","バナナ","魚","星","きのこ"
+    "富士山","家","ケーキ","帽子","傘","木","バナナ","魚","星","きのこ",
+    "おにぎり","ピザ","にんじん","テント","旗","本","すいか","サンドイッチ",
+    "ホットドッグ","バゲット","とうもろこし","えんぴつ","ろうそく","サボテン",
+    "ドア","まど","看板","食パン","アイスクリーム","スマホ"
   ];
 
   // Each topic's typical silhouette, expressed as an expected bounding-box
@@ -573,7 +576,27 @@
     "帽子":   { ratio: 1.60, ratioTol: 0.60, fill: 0.42, fillTol: 0.35 },
     "ケーキ": { ratio: 1.30, ratioTol: 0.55, fill: 0.52, fillTol: 0.35 },
     "きのこ": { ratio: 0.85, ratioTol: 0.45, fill: 0.42, fillTol: 0.35 },
-    "魚":     { ratio: 2.10, ratioTol: 0.70, fill: 0.50, fillTol: 0.35 }
+    "魚":     { ratio: 2.10, ratioTol: 0.70, fill: 0.50, fillTol: 0.35 },
+    "おにぎり":     { ratio: 0.95, ratioTol: 0.40, fill: 0.55, fillTol: 0.35 },
+    "ピザ":         { ratio: 1.20, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
+    "にんじん":     { ratio: 0.45, ratioTol: 0.35, fill: 0.45, fillTol: 0.35 },
+    "テント":       { ratio: 1.30, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
+    "旗":           { ratio: 0.55, ratioTol: 0.40, fill: 0.40, fillTol: 0.35 },
+    "本":           { ratio: 1.30, ratioTol: 0.45, fill: 0.60, fillTol: 0.30 },
+    "すいか":       { ratio: 1.15, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
+    "サンドイッチ": { ratio: 1.25, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
+    "ホットドッグ": { ratio: 2.30, ratioTol: 0.70, fill: 0.45, fillTol: 0.35 },
+    "バゲット":     { ratio: 2.60, ratioTol: 0.75, fill: 0.40, fillTol: 0.35 },
+    "とうもろこし": { ratio: 0.45, ratioTol: 0.35, fill: 0.50, fillTol: 0.35 },
+    "えんぴつ":     { ratio: 0.30, ratioTol: 0.30, fill: 0.40, fillTol: 0.35 },
+    "ろうそく":     { ratio: 0.40, ratioTol: 0.35, fill: 0.45, fillTol: 0.35 },
+    "サボテン":     { ratio: 0.55, ratioTol: 0.40, fill: 0.50, fillTol: 0.35 },
+    "ドア":         { ratio: 0.50, ratioTol: 0.35, fill: 0.60, fillTol: 0.30 },
+    "まど":         { ratio: 0.90, ratioTol: 0.40, fill: 0.55, fillTol: 0.30 },
+    "看板":         { ratio: 1.50, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
+    "食パン":       { ratio: 1.40, ratioTol: 0.45, fill: 0.55, fillTol: 0.35 },
+    "アイスクリーム": { ratio: 0.50, ratioTol: 0.40, fill: 0.45, fillTol: 0.35 },
+    "スマホ":       { ratio: 0.50, ratioTol: 0.35, fill: 0.60, fillTol: 0.30 }
   };
 
   // Used by "なぞーる" (trace) mode as a faint guide stencil -- no external
@@ -581,7 +604,13 @@
   // canvas filter.
   var TOPIC_EMOJI = {
     "富士山": "🗻", "家": "🏠", "ケーキ": "🎂", "帽子": "🎩", "傘": "☂️",
-    "木": "🌳", "バナナ": "🍌", "魚": "🐟", "星": "⭐", "きのこ": "🍄"
+    "木": "🌳", "バナナ": "🍌", "魚": "🐟", "星": "⭐", "きのこ": "🍄",
+    "おにぎり": "🍙", "ピザ": "🍕", "にんじん": "🥕", "テント": "⛺",
+    "旗": "🚩", "本": "📖", "すいか": "🍉", "サンドイッチ": "🥪",
+    "ホットドッグ": "🌭", "バゲット": "🥖", "とうもろこし": "🌽",
+    "えんぴつ": "✏️", "ろうそく": "🕯️", "サボテン": "🌵", "ドア": "🚪",
+    "まど": "🪟", "看板": "🪧", "食パン": "🍞", "アイスクリーム": "🍦",
+    "スマホ": "📱"
   };
 
   var COLORS = [
@@ -641,7 +670,7 @@
     isDrawing: false, // is the button currently pressed
     paused: false,
     zoom: 1,
-    traceMode: false,
+    traceMode: true,
     lastFrameTime: null,
     animId: null,
     audioCtx: null,
@@ -1384,7 +1413,7 @@
     state.isDrawing = false;
     state.paused = false;
     state.zoom = 1;
-    state.traceMode = false;
+    state.traceMode = true;
     state.showTopicOnSave = true;
     if (state.animId !== null){
       cancelAnimationFrame(state.animId);
@@ -1394,7 +1423,7 @@
     $mainBtn.classList.remove("drawing-mode", "active-press");
     $btnPause.textContent = "⏸ 一時停止";
     $btnZoom.textContent = "🔍 1.0x";
-    $btnTrace.textContent = "📝 なぞーる: OFF";
+    $btnTrace.textContent = "📝 なぞーる: ON";
     $chkHideTopic.checked = false;
     updateCamera();
     showScreen("home");
