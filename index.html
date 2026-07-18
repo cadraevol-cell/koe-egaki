@@ -212,6 +212,9 @@
     width: 100%; height: 100%;
     pointer-events: none;
   }
+  #guideCanvas{
+    pointer-events: none;
+  }
   .pitch-indicator{
     position: absolute;
     top: 8px; right: 8px;
@@ -403,6 +406,8 @@
       ・「⏸ 一時停止」でペンの動きを完全に止められます。<br>
       ・「🔍 ズーム」でキャンバスを拡大すると、ペンの実速度はそのままに画面上ではゆっくり大きく動くので、
       細かい部分も狙って描きやすくなります。<br>
+      ・「📝 なぞーる」をONにすると、お題の薄いお手本が下絵として表示され、それをなぞって描けます
+      （下絵は保存画像には写りません）。<br>
       ・描き終わったら右下の「完成」を押すと結果画面に切り替わり、判定と「次のお題へ」「タイトルへ戻る」が選べます。
     </div>
   </div>
@@ -422,6 +427,7 @@
         <button class="icon-btn" id="btnReroll">お題チェンジ</button>
         <button class="icon-btn" id="btnPause">⏸ 一時停止</button>
         <button class="icon-btn" id="btnZoom">🔍 1x</button>
+        <button class="icon-btn" id="btnTrace">📝 なぞーる: OFF</button>
         <button class="icon-btn" id="btnHome">ホームに戻る</button>
       </div>
     </div>
@@ -432,6 +438,7 @@
           <div class="camera" id="camera">
             <div class="side-zone" id="leftZone"></div>
             <div class="canvas-wrap" id="canvasWrap">
+              <canvas id="guideCanvas"></canvas>
               <canvas id="drawCanvas"></canvas>
             </div>
             <div class="side-zone" id="rightZone"></div>
@@ -532,6 +539,18 @@
     "風船":   { ratio: 0.75, ratioTol: 0.45, fill: 0.58, fillTol: 0.35 }
   };
 
+  // Used by "なぞーる" (trace) mode as a faint guide stencil -- no external
+  // image assets, just a big emoji glyph rendered with a grayscale+low-alpha
+  // canvas filter.
+  var TOPIC_EMOJI = {
+    "猫": "🐱", "犬": "🐶", "うさぎ": "🐰", "魚": "🐟", "鳥": "🐦",
+    "富士山": "🗻", "太陽": "☀️", "月": "🌙", "星": "⭐", "花": "🌸",
+    "木": "🌳", "りんご": "🍎", "バナナ": "🍌", "家": "🏠", "車": "🚗",
+    "電車": "🚃", "船": "🚢", "ロケット": "🚀", "傘": "☂️", "帽子": "🎩",
+    "時計": "🕐", "ハート": "❤️", "雪だるま": "⛄", "ケーキ": "🎂",
+    "きのこ": "🍄", "カメ": "🐢", "ぞう": "🐘", "風船": "🎈"
+  };
+
   var COLORS = [
     "#111111", "#e53935", "#fb8c00", "#fdd835", "#43a047",
     "#1e88e5", "#8e24aa", "#ec407a", "#ffffff", "#6d4c41"
@@ -589,6 +608,7 @@
     isDrawing: false, // is the button currently pressed
     paused: false,
     zoom: 1,
+    traceMode: false,
     lastFrameTime: null,
     animId: null,
     audioCtx: null,
@@ -628,6 +648,8 @@
   var $leftZone = document.getElementById("leftZone");
   var $rightZone = document.getElementById("rightZone");
   var $canvasWrap = document.getElementById("canvasWrap");
+  var $guideCanvas = document.getElementById("guideCanvas");
+  var guideCtx = $guideCanvas.getContext("2d");
   var $canvas = document.getElementById("drawCanvas");
   var ctx = $canvas.getContext("2d", { willReadFrequently: true });
   var $cursorCanvas = document.getElementById("cursorCanvas");
@@ -638,6 +660,7 @@
   var $widthSlider = document.getElementById("widthSlider");
   var $sensSlider = document.getElementById("sensSlider");
   var $btnPause = document.getElementById("btnPause");
+  var $btnTrace = document.getElementById("btnTrace");
   var $btnZoom = document.getElementById("btnZoom");
 
   var $btnUndo = document.getElementById("btnUndo");
@@ -762,14 +785,22 @@
     $canvas.width = Math.floor(state.canvasCssW * dpr);
     $canvas.height = Math.floor(state.canvasCssH * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, state.canvasCssW, state.canvasCssH);
+    // drawCanvas itself stays transparent -- the white "paper" look comes
+    // from .canvas-wrap's CSS background showing through underneath, which
+    // leaves room for #guideCanvas (the なぞーる trace guide) to sit between
+    // the white background and the ink without ever ending up in a save.
+    ctx.clearRect(0, 0, state.canvasCssW, state.canvasCssH);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
     if (old){
       ctx.drawImage(old, 0, 0, old.width, old.height, 0, 0, state.canvasCssW, state.canvasCssH);
     }
+
+    $guideCanvas.width = Math.floor(state.canvasCssW * dpr);
+    $guideCanvas.height = Math.floor(state.canvasCssH * dpr);
+    guideCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawGuide();
 
     // the cursor overlay spans the *entire* play area (zones + canvas),
     // since the pen is visible while passing through the side zones too
@@ -790,8 +821,7 @@
   function clearCanvas(){
     ctx.save();
     ctx.setTransform(1,0,0,1,0,0);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, $canvas.width, $canvas.height);
+    ctx.clearRect(0, 0, $canvas.width, $canvas.height);
     ctx.restore();
   }
 
@@ -822,6 +852,30 @@
     var t = pick(PICTURE_TOPICS);
     state.currentPicture = t;
     $pictureTopic.textContent = "お題：" + t;
+    drawGuide();
+  }
+
+  // ---------------------------------------------------------
+  // なぞーる (trace) MODE
+  // ---------------------------------------------------------
+  // Draws a big, faint (grayscale + low alpha) emoji of the current topic
+  // onto guideCanvas, which sits underneath drawCanvas -- so ink traced on
+  // top covers it, and it never ends up in a saved/shared PNG (only
+  // drawCanvas is captured on save).
+  function drawGuide(){
+    guideCtx.clearRect(0, 0, state.canvasCssW, state.canvasCssH);
+    if (!state.traceMode) return;
+
+    var emoji = TOPIC_EMOJI[state.currentPicture];
+    if (!emoji) return;
+
+    guideCtx.save();
+    guideCtx.filter = "grayscale(100%) opacity(20%)";
+    guideCtx.textAlign = "center";
+    guideCtx.textBaseline = "middle";
+    guideCtx.font = Math.floor(state.canvasCssH * 0.62) + "px sans-serif";
+    guideCtx.fillText(emoji, state.canvasCssW / 2, state.canvasCssH / 2);
+    guideCtx.restore();
   }
 
   // ---------------------------------------------------------
@@ -1199,6 +1253,11 @@
     out.width = $canvas.width;
     out.height = $canvas.height;
     var octx = out.getContext("2d");
+    // drawCanvas itself is transparent (see resizeCanvas), so paint a white
+    // backing before compositing it -- this also naturally excludes the
+    // なぞーる guide (guideCanvas), which is a separate layer never captured.
+    octx.fillStyle = "#ffffff";
+    octx.fillRect(0, 0, out.width, out.height);
     octx.drawImage($canvas, 0, 0);
 
     if (state.showTopicOnSave && $pictureTopic.textContent){
@@ -1269,6 +1328,7 @@
     state.isDrawing = false;
     state.paused = false;
     state.zoom = 1;
+    state.traceMode = false;
     if (state.animId !== null){
       cancelAnimationFrame(state.animId);
       state.animId = null;
@@ -1277,6 +1337,7 @@
     $mainBtn.classList.remove("drawing-mode", "active-press");
     $btnPause.textContent = "⏸ 一時停止";
     $btnZoom.textContent = "🔍 1x";
+    $btnTrace.textContent = "📝 なぞーる: OFF";
     updateCamera();
     showScreen("home");
   }
@@ -1319,6 +1380,12 @@
     drawCursorOverlay();
   });
 
+  $btnTrace.addEventListener("click", function(){
+    state.traceMode = !state.traceMode;
+    $btnTrace.textContent = state.traceMode ? "📝 なぞーる: ON" : "📝 なぞーる: OFF";
+    drawGuide();
+  });
+
   // ---------------------------------------------------------
   // JUDGE (heuristic "how close to the topic" percentage + snarky comment)
   // ---------------------------------------------------------
@@ -1345,8 +1412,11 @@
       var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       for (var i = 0; i < data.length; i += stride){
         sampleCount++;
-        var r = data[i], g = data[i + 1], b = data[i + 2];
-        if (!(r > 245 && g > 245 && b > 245)){
+        var r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+        // drawCanvas is transparent where nothing has been painted (see
+        // resizeCanvas), so both "near-white" and "mostly transparent"
+        // count as blank/unpainted here.
+        if (a > 20 && !(r > 245 && g > 245 && b > 245)){
           painted++;
           var key = (r >> 5) + "_" + (g >> 5) + "_" + (b >> 5);
           buckets[key] = true;
