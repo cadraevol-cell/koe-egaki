@@ -338,9 +338,34 @@
     border: 1px solid var(--line);
     border-radius: 20px;
     padding: 28px 24px;
-    max-width: 340px;
+    max-width: 620px;
     width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    align-items: center;
+    justify-content: center;
+  }
+  .result-info{
+    flex: 1 1 260px;
+    min-width: 220px;
     text-align: center;
+  }
+  .result-preview{
+    flex: 1 1 200px;
+    max-width: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .result-preview img{
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
   }
   .result-title{
     font-size: 2.1rem;
@@ -404,8 +429,8 @@
       塗れませんが、ここでも声の高さは反映されるので、スタート前から音程を合わせておけます。<br>
       ・右下のボタンを<b>長押し</b>している間だけ色が塗られます。<br>
       ・「⏸ 一時停止」でペンの動きを完全に止められます。<br>
-      ・「🔍 ズーム」でキャンバスを拡大すると、ペンの実速度はそのままに画面上ではゆっくり大きく動くので、
-      細かい部分も狙って描きやすくなります。<br>
+      ・キャンバス上で<b>マウスホイール</b>を回すとズームできます（スマホでは「🔍 ズーム」ボタンで
+      1x⇔2.5xを切り替え）。拡大しても実際のペンの速さは変わらないので、細かい部分も狙って描きやすくなります。<br>
       ・「📝 なぞーる」をONにすると、お題の薄いお手本が下絵として表示され、それをなぞって描けます
       （下絵は保存画像には写りません）。<br>
       ・描き終わったら右下の「完成」を押すと結果画面に切り替わり、判定と「次のお題へ」「タイトルへ戻る」が選べます。
@@ -426,7 +451,7 @@
         <button class="icon-btn" id="btnShare">シェア</button>
         <button class="icon-btn" id="btnReroll">お題チェンジ</button>
         <button class="icon-btn" id="btnPause">⏸ 一時停止</button>
-        <button class="icon-btn" id="btnZoom">🔍 1x</button>
+        <button class="icon-btn" id="btnZoom">🔍 1.0x</button>
         <button class="icon-btn" id="btnTrace">📝 なぞーる: OFF</button>
         <button class="icon-btn" id="btnHome">ホームに戻る</button>
       </div>
@@ -472,17 +497,23 @@
   <!-- RESULT SCREEN -->
   <div id="result" class="screen">
     <div class="result-card">
-      <div class="result-title">完成！</div>
-      <div class="judge-label">お題</div>
-      <div class="judge-topic" id="judgeTopicLabel">-</div>
-      <div class="judge-percent" id="judgePercent">0%</div>
-      <div class="judge-persona">🐼 審査員パンダのコメント</div>
-      <div class="judge-comment" id="judgeComment"></div>
-      <div class="judge-caption">※お題ごとの典型的な形（縦横比・塗りの密度）との近さで採点する簡易判定です（本格的な画像認識AIではありません）</div>
-      <div class="result-actions">
-        <button class="icon-btn" id="btnResultSave">保存(PNG)</button>
-        <button class="icon-btn" id="btnResultHome">🏠 タイトルへ戻る</button>
-        <button class="big-btn" id="btnResultNext">🔄 次のお題へ</button>
+      <div class="result-info">
+        <div class="result-title">完成！</div>
+        <div class="judge-label">お題</div>
+        <div class="judge-topic" id="judgeTopicLabel">-</div>
+        <div class="judge-percent" id="judgePercent">0%</div>
+        <div class="judge-persona">🐼 審査員パンダのコメント</div>
+        <div class="judge-comment" id="judgeComment"></div>
+        <div class="judge-caption">※お題ごとの典型的な形（縦横比・塗りの密度）との近さで採点する簡易判定です（本格的な画像認識AIではありません）</div>
+        <div class="result-actions">
+          <button class="icon-btn" id="btnResultBack">↩ 戻って続ける</button>
+          <button class="icon-btn" id="btnResultSave">保存(PNG)</button>
+          <button class="icon-btn" id="btnResultHome">🏠 タイトルへ戻る</button>
+          <button class="big-btn" id="btnResultNext">🔄 次のお題へ</button>
+        </div>
+      </div>
+      <div class="result-preview">
+        <img id="resultPreviewImg" alt="完成した絵">
       </div>
     </div>
   </div>
@@ -496,10 +527,15 @@
   // ---------------------------------------------------------
   // DATA
   // ---------------------------------------------------------
+  // Rounder topics (circles, hearts, balloons...) turned out to be *harder*
+  // in this game than angular ones: a wobbly voice-controlled pen can't
+  // trace a clean curve, but a rough, multi-pass scribble already reads
+  // fine as a triangle/box/layered shape. So this list leans on flat,
+  // straight-edged silhouettes (mountain, house, cake, hat...) plus a
+  // couple of forgiving elongated curves (banana, fish) and a scribble-
+  // friendly star, and drops the circle-heavy topics entirely.
   var PICTURE_TOPICS = [
-    "猫","犬","うさぎ","魚","鳥","富士山","太陽","月","星","花","木",
-    "りんご","バナナ","家","車","電車","船","ロケット","傘","帽子",
-    "時計","ハート","雪だるま","ケーキ","きのこ","カメ","ぞう","風船"
+    "富士山","家","ケーキ","帽子","傘","木","バナナ","魚","星","きのこ"
   ];
 
   // Each topic's typical silhouette, expressed as an expected bounding-box
@@ -509,46 +545,24 @@
   // well its *shape* matches the topic -- not real object recognition,
   // just a geometry-based approximation of it.
   var TOPIC_PROFILES = {
-    "猫":     { ratio: 1.05, ratioTol: 0.55, fill: 0.50, fillTol: 0.35 },
-    "犬":     { ratio: 1.15, ratioTol: 0.55, fill: 0.48, fillTol: 0.35 },
-    "うさぎ": { ratio: 0.60, ratioTol: 0.45, fill: 0.42, fillTol: 0.35 },
-    "魚":     { ratio: 2.10, ratioTol: 0.70, fill: 0.50, fillTol: 0.35 },
-    "鳥":     { ratio: 1.30, ratioTol: 0.60, fill: 0.42, fillTol: 0.35 },
     "富士山": { ratio: 1.80, ratioTol: 0.60, fill: 0.55, fillTol: 0.35 },
-    "太陽":   { ratio: 1.00, ratioTol: 0.45, fill: 0.55, fillTol: 0.35 },
-    "月":     { ratio: 1.00, ratioTol: 0.45, fill: 0.55, fillTol: 0.35 },
     "星":     { ratio: 1.00, ratioTol: 0.45, fill: 0.32, fillTol: 0.30 },
-    "花":     { ratio: 1.00, ratioTol: 0.50, fill: 0.42, fillTol: 0.35 },
     "木":     { ratio: 0.60, ratioTol: 0.45, fill: 0.40, fillTol: 0.35 },
-    "りんご": { ratio: 0.90, ratioTol: 0.40, fill: 0.60, fillTol: 0.35 },
     "バナナ": { ratio: 2.00, ratioTol: 0.70, fill: 0.32, fillTol: 0.30 },
     "家":     { ratio: 1.10, ratioTol: 0.50, fill: 0.55, fillTol: 0.35 },
-    "車":     { ratio: 2.00, ratioTol: 0.65, fill: 0.50, fillTol: 0.35 },
-    "電車":   { ratio: 2.80, ratioTol: 0.80, fill: 0.50, fillTol: 0.35 },
-    "船":     { ratio: 1.80, ratioTol: 0.65, fill: 0.42, fillTol: 0.35 },
-    "ロケット": { ratio: 0.42, ratioTol: 0.35, fill: 0.42, fillTol: 0.35 },
     "傘":     { ratio: 1.10, ratioTol: 0.50, fill: 0.48, fillTol: 0.35 },
     "帽子":   { ratio: 1.60, ratioTol: 0.60, fill: 0.42, fillTol: 0.35 },
-    "時計":   { ratio: 1.00, ratioTol: 0.45, fill: 0.58, fillTol: 0.35 },
-    "ハート": { ratio: 1.00, ratioTol: 0.45, fill: 0.42, fillTol: 0.35 },
-    "雪だるま": { ratio: 0.55, ratioTol: 0.40, fill: 0.52, fillTol: 0.35 },
     "ケーキ": { ratio: 1.30, ratioTol: 0.55, fill: 0.52, fillTol: 0.35 },
     "きのこ": { ratio: 0.85, ratioTol: 0.45, fill: 0.42, fillTol: 0.35 },
-    "カメ":   { ratio: 1.60, ratioTol: 0.55, fill: 0.48, fillTol: 0.35 },
-    "ぞう":   { ratio: 1.50, ratioTol: 0.55, fill: 0.48, fillTol: 0.35 },
-    "風船":   { ratio: 0.75, ratioTol: 0.45, fill: 0.58, fillTol: 0.35 }
+    "魚":     { ratio: 2.10, ratioTol: 0.70, fill: 0.50, fillTol: 0.35 }
   };
 
   // Used by "なぞーる" (trace) mode as a faint guide stencil -- no external
   // image assets, just a big emoji glyph rendered with a grayscale+low-alpha
   // canvas filter.
   var TOPIC_EMOJI = {
-    "猫": "🐱", "犬": "🐶", "うさぎ": "🐰", "魚": "🐟", "鳥": "🐦",
-    "富士山": "🗻", "太陽": "☀️", "月": "🌙", "星": "⭐", "花": "🌸",
-    "木": "🌳", "りんご": "🍎", "バナナ": "🍌", "家": "🏠", "車": "🚗",
-    "電車": "🚃", "船": "🚢", "ロケット": "🚀", "傘": "☂️", "帽子": "🎩",
-    "時計": "🕐", "ハート": "❤️", "雪だるま": "⛄", "ケーキ": "🎂",
-    "きのこ": "🍄", "カメ": "🐢", "ぞう": "🐘", "風船": "🎈"
+    "富士山": "🗻", "家": "🏠", "ケーキ": "🎂", "帽子": "🎩", "傘": "☂️",
+    "木": "🌳", "バナナ": "🍌", "魚": "🐟", "星": "⭐", "きのこ": "🍄"
   };
 
   var COLORS = [
@@ -674,9 +688,11 @@
   var $judgeTopicLabel = document.getElementById("judgeTopicLabel");
   var $judgePercent = document.getElementById("judgePercent");
   var $judgeComment = document.getElementById("judgeComment");
+  var $btnResultBack = document.getElementById("btnResultBack");
   var $btnResultSave = document.getElementById("btnResultSave");
   var $btnResultHome = document.getElementById("btnResultHome");
   var $btnResultNext = document.getElementById("btnResultNext");
+  var $resultPreviewImg = document.getElementById("resultPreviewImg");
 
   var $customColorInput = null;
 
@@ -1336,7 +1352,7 @@
     $mainBtn.textContent = "スタート";
     $mainBtn.classList.remove("drawing-mode", "active-press");
     $btnPause.textContent = "⏸ 一時停止";
-    $btnZoom.textContent = "🔍 1x";
+    $btnZoom.textContent = "🔍 1.0x";
     $btnTrace.textContent = "📝 なぞーる: OFF";
     updateCamera();
     showScreen("home");
@@ -1369,16 +1385,34 @@
 
   // ---------------------------------------------------------
   // ZOOM (magnifies Layer 1 / the canvas so the same real pen speed covers
-  // proportionally less of the visible area -- lets you draw finer detail)
+  // proportionally less of the visible area -- lets you draw finer detail).
+  // Mouse wheel over the canvas gives continuous zoom (desktop); the button
+  // is a simple toggle between 1x and a preset zoomed-in level, for touch
+  // devices that have no wheel.
   // ---------------------------------------------------------
-  var ZOOM_LEVELS = [1, 2, 3];
-  $btnZoom.addEventListener("click", function(){
-    var idx = ZOOM_LEVELS.indexOf(state.zoom);
-    state.zoom = ZOOM_LEVELS[(idx + 1) % ZOOM_LEVELS.length];
-    $btnZoom.textContent = "🔍 " + state.zoom + "x";
+  var ZOOM_MIN = 1;
+  var ZOOM_MAX = 4;
+  var ZOOM_BUTTON_PRESET = 2.5;
+
+  function applyZoom(newZoom){
+    state.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newZoom));
+    $btnZoom.textContent = "🔍 " + state.zoom.toFixed(1) + "x";
     updateCamera();
     drawCursorOverlay();
+  }
+
+  $btnZoom.addEventListener("click", function(){
+    applyZoom(state.zoom > 1.01 ? 1 : ZOOM_BUTTON_PRESET);
   });
+
+  $playWrap.addEventListener("wheel", function(e){
+    if (state.screen !== "game") return;
+    e.preventDefault();
+    // exponential response feels more natural than a linear one across a
+    // wide zoom range, and naturally slows down as you approach the limits
+    var factor = Math.exp(-e.deltaY * 0.0015);
+    applyZoom(state.zoom * factor);
+  }, { passive: false });
 
   $btnTrace.addEventListener("click", function(){
     state.traceMode = !state.traceMode;
@@ -1477,10 +1511,18 @@
     $judgeTopicLabel.textContent = $pictureTopic.textContent;
     $judgePercent.textContent = score + "%";
     $judgeComment.textContent = pickComment(score);
+    $resultPreviewImg.src = buildSaveCanvas().toDataURL("image/png");
     showScreen("result");
   }
 
   $btnFinish.addEventListener("click", judgeDrawing);
+  // Dismisses the result screen without starting a new round -- the
+  // current topic, canvas, and pen position are untouched (gameState never
+  // left "playing"), so this just resumes the loop right where it paused.
+  $btnResultBack.addEventListener("click", function(){
+    showScreen("game");
+    startLoop();
+  });
   $btnResultHome.addEventListener("click", function(){
     goHome();
   });
@@ -1495,7 +1537,7 @@
     buildPalette();
     showScreen("game");
     state.zoom = 1;
-    $btnZoom.textContent = "🔍 1x";
+    $btnZoom.textContent = "🔍 1.0x";
     requestAnimationFrame(function(){
       resizeCanvas();
       clearCanvas();
@@ -1520,7 +1562,7 @@
     $mainBtn.textContent = "スタート";
     $mainBtn.classList.remove("drawing-mode", "active-press");
     $btnPause.textContent = "⏸ 一時停止";
-    $btnZoom.textContent = "🔍 1x";
+    $btnZoom.textContent = "🔍 1.0x";
     showScreen("game");
     requestAnimationFrame(function(){
       resizeCanvas();
