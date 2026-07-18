@@ -97,6 +97,46 @@
     padding: 14px 18px;
   }
   .howto b{ color: var(--text); }
+  .howto-steps{
+    counter-reset: step;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .howto-steps li{
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    line-height: 1.5;
+  }
+  .howto-steps li::before{
+    content: counter(step);
+    flex-shrink: 0;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+    font-size: .75rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .howto-more{ margin-top: 14px; font-size: .78rem; }
+  .howto-more summary{
+    cursor: pointer;
+    color: var(--accent2);
+    font-weight: 700;
+    list-style: none;
+  }
+  .howto-more summary::-webkit-details-marker{ display: none; }
+  .howto-more summary::before{ content: "▸ "; }
+  .howto-more[open] summary::before{ content: "▾ "; }
+  .howto-more .howto-more-body{ margin-top: 8px; line-height: 1.8; color: var(--sub); }
 
   /* ---------- GAME ---------- */
   #game{
@@ -323,6 +363,15 @@
     color: var(--sub);
   }
   .controls-row input[type=range]{ width: 100%; accent-color: var(--accent); }
+  .ctrl-toggles{
+    flex: 1 1 100%;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding-top: 2px;
+    border-top: 1px solid var(--line);
+  }
+  .ctrl-toggles .icon-btn{ flex: 1 1 auto; text-align: center; }
 
   /* ---------- result screen ---------- */
   #result{
@@ -387,6 +436,7 @@
     background-clip: text;
     color: transparent;
   }
+  .best-score{ font-size: .78rem; color: var(--good); font-weight: 700; margin-bottom: 10px; min-height: 1.2em; }
   .judge-persona{ font-size:.8rem; color:var(--sub); margin-bottom:6px; }
   .judge-comment{
     font-size: .98rem;
@@ -418,6 +468,21 @@
   }
   .result-actions .icon-btn{ padding: 12px; font-size: .85rem; }
   .result-actions .big-btn{ margin-top: 0; padding: 14px 20px; font-size: 1rem; width: 100%; }
+  .confetti-piece{
+    position: absolute;
+    top: -12px;
+    width: 8px; height: 14px;
+    opacity: .9;
+    pointer-events: none;
+    z-index: 80;
+    animation-name: confetti-fall;
+    animation-timing-function: cubic-bezier(.4,.1,.6,.9);
+    animation-fill-mode: forwards;
+  }
+  @keyframes confetti-fall{
+    0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(115vh) rotate(360deg); opacity: 0; }
+  }
 
   @media (max-width: 640px){
     .palette{ width: 46px; }
@@ -438,17 +503,23 @@
     <button class="big-btn" id="startBtn">はじめる</button>
     <div id="homeMsg"></div>
     <div class="howto">
-      <b>あそびかた</b><br>
-      ・ペンは自動で右へ進み続け、右端に着いたら左端からまた現れます。<br>
-      ・声の<b>高さ</b>でペンが<b>上下</b>します（高い声＝上、低い声＝下）。キャンバスの左右の半透明エリアは
-      塗れませんが、ここでも声の高さは反映されるので、スタート前から音程を合わせておけます。<br>
-      ・右下のボタンを<b>長押し</b>している間だけ色が塗られます。<br>
-      ・「⏸ 一時停止」でペンの動きを完全に止められます。<br>
-      ・キャンバス上で<b>マウスホイール</b>を回すとズームできます（スマホでは「🔍 ズーム」ボタンで
-      1x⇔2.5xを切り替え）。拡大しても実際のペンの速さは変わらないので、細かい部分も狙って描きやすくなります。<br>
-      ・「📝 なぞーる」をONにすると、お題の薄いお手本が下絵として表示され、それをなぞって描けます
-      （下絵は保存画像には写りません）。<br>
-      ・描き終わったら右下の「完成」を押すと結果画面に切り替わり、判定と「次のお題へ」「タイトルへ戻る」が選べます。
+      <b>あそびかた</b>
+      <ol class="howto-steps">
+        <li>声の<b>高さ</b>でペンが<b>上下</b>する（高い声＝上、低い声＝下）</li>
+        <li>ペンは自動で右へ進み続ける。右下のボタンを<b>長押し</b>している間だけ色が塗られる</li>
+        <li>描けたら「完成」を押すと、審査員パンダが判定してくれる</li>
+      </ol>
+      <details class="howto-more">
+        <summary>もっと詳しく</summary>
+        <div class="howto-more-body">
+          ・「📝 なぞーる」は最初からON。お題の薄いお手本をなぞって描ける（保存画像には写らない）。<br>
+          ・「⏸ 一時停止」でペンの動きを完全に止められる。<br>
+          ・マウスホイール（スマホは「🔍 ズーム」ボタン）で拡大すると、実際のペンの速さそのままで
+          画面上ではゆっくり大きく動くので、細かい部分も狙いやすい。<br>
+          ・キャンバス左右の半透明エリアは塗れないが、ここでも声の高さは反映されるので、
+          スタート前から音程を合わせておける。
+        </div>
+      </details>
     </div>
   </div>
 
@@ -465,9 +536,6 @@
         <button class="icon-btn" id="btnSave">保存(PNG)</button>
         <button class="icon-btn" id="btnShare">シェア</button>
         <button class="icon-btn" id="btnReroll">お題チェンジ</button>
-        <button class="icon-btn" id="btnPause">⏸ 一時停止</button>
-        <button class="icon-btn" id="btnZoom">🔍 1.0x</button>
-        <button class="icon-btn" id="btnTrace">📝 なぞーる: ON</button>
         <button class="icon-btn" id="btnHome">ホームに戻る</button>
       </div>
     </div>
@@ -500,6 +568,11 @@
       <label class="ctrl">声の感度（音域幅）
         <input type="range" id="sensSlider" min="60" max="500" step="10" value="150">
       </label>
+      <div class="ctrl-toggles">
+        <button class="icon-btn" id="btnPause">⏸ 一時停止</button>
+        <button class="icon-btn" id="btnZoom">🔍 1.0x</button>
+        <button class="icon-btn" id="btnTrace">📝 なぞーる: ON</button>
+      </div>
     </div>
 
     <div class="bottombar">
@@ -517,6 +590,7 @@
         <div class="judge-label">お題</div>
         <div class="judge-topic" id="judgeTopicLabel">-</div>
         <div class="judge-percent" id="judgePercent">0%</div>
+        <div class="best-score" id="bestScoreLine"></div>
         <div class="judge-persona">🐼 審査員パンダのコメント</div>
         <div class="judge-comment" id="judgeComment"></div>
         <div class="judge-caption">※お題ごとの典型的な形（縦横比・塗りの密度）との近さで採点する簡易判定です（本格的な画像認識AIではありません）</div>
@@ -742,6 +816,7 @@
   var $btnResultNext = document.getElementById("btnResultNext");
   var $resultPreviewImg = document.getElementById("resultPreviewImg");
   var $chkHideTopic = document.getElementById("chkHideTopic");
+  var $bestScoreLine = document.getElementById("bestScoreLine");
 
   var $customColorInput = null;
 
@@ -1577,6 +1652,79 @@
     $resultPreviewImg.src = buildSaveCanvas().toDataURL("image/png");
   }
 
+  // ---------------------------------------------------------
+  // RESULT "JUICE": animated score reveal, a one-shot chime, confetti for
+  // good scores, and a localStorage-backed personal best. None of this
+  // touches gameplay -- it only runs once the pen loop is already paused.
+  // ---------------------------------------------------------
+  var BEST_SCORE_KEY = "koeegaki_best_score";
+
+  function getBestScore(){
+    try {
+      var v = parseInt(localStorage.getItem(BEST_SCORE_KEY), 10);
+      return isNaN(v) ? null : v;
+    } catch(e){
+      return null; // e.g. private-browsing storage restrictions
+    }
+  }
+
+  function saveBestScore(score){
+    try { localStorage.setItem(BEST_SCORE_KEY, String(score)); } catch(e){ /* ignore */ }
+  }
+
+  function animateScoreCountUp(score){
+    var start = null;
+    var duration = 700;
+    function frame(ts){
+      if (start === null) start = ts;
+      var t = Math.min(1, (ts - start) / duration);
+      var eased = 1 - Math.pow(1 - t, 3);
+      $judgePercent.textContent = Math.round(eased * score) + "%";
+      if (t < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function playResultChime(score){
+    if (!state.audioCtx) return;
+    resumeAudioIfNeeded();
+    var ctxA = state.audioCtx;
+    var now = ctxA.currentTime;
+    var notes = score >= 70 ? [523.25, 659.25, 783.99, 1046.50] : [392.00, 440.00, 523.25];
+    var g = ctxA.createGain();
+    g.gain.value = 0.12;
+    g.connect(ctxA.destination);
+    notes.forEach(function(freq, i){
+      var osc = ctxA.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      var ng = ctxA.createGain();
+      var t = now + i * 0.09;
+      ng.gain.setValueAtTime(0, t);
+      ng.gain.linearRampToValueAtTime(0.9, t + 0.015);
+      ng.gain.linearRampToValueAtTime(0, t + 0.28);
+      osc.connect(ng);
+      ng.connect(g);
+      osc.start(t);
+      osc.stop(t + 0.3);
+    });
+  }
+
+  var CONFETTI_COLORS = ["#ff5c9c", "#7c5cff", "#4ade80", "#ffd76a", "#38bdf8"];
+
+  function launchConfetti(){
+    for (var i = 0; i < 26; i++){
+      var piece = document.createElement("div");
+      piece.className = "confetti-piece";
+      piece.style.left = (Math.random() * 100) + "%";
+      piece.style.background = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+      piece.style.animationDelay = (Math.random() * 0.3) + "s";
+      piece.style.animationDuration = (1.4 + Math.random() * 0.8) + "s";
+      $result.appendChild(piece);
+      (function(el){ setTimeout(function(){ el.remove(); }, 2600); })(piece);
+    }
+  }
+
   function showResultScreen(score){
     state.isDrawing = false;
     if (state.animId !== null){
@@ -1584,11 +1732,22 @@
       state.animId = null;
     }
     $judgeTopicLabel.textContent = $pictureTopic.textContent;
-    $judgePercent.textContent = score + "%";
+    $judgePercent.textContent = "0%";
     $judgeComment.textContent = pickComment(score);
     $chkHideTopic.checked = !state.showTopicOnSave;
     updateResultPreview();
+
+    var best = getBestScore();
+    var isNewBest = best === null || score > best;
+    if (isNewBest) saveBestScore(score);
+    $bestScoreLine.textContent = isNewBest
+      ? "🎉 自己ベスト更新！ " + score + "%"
+      : "自己ベスト: " + best + "%";
+
     showScreen("result");
+    animateScoreCountUp(score);
+    playResultChime(score);
+    if (score >= 70) launchConfetti();
   }
 
   // Lets people share a "guess what this is" doodle without giving the
