@@ -396,6 +396,21 @@
     min-height: 3em;
   }
   .judge-caption{ font-size:.68rem; color:var(--sub); margin-bottom:18px; }
+  .hide-topic-toggle{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .8rem;
+    color: var(--text);
+    text-align: left;
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    cursor: pointer;
+  }
+  .hide-topic-toggle input{ flex-shrink: 0; width: 18px; height: 18px; accent-color: var(--accent); }
   .result-actions{
     display: flex;
     flex-direction: column;
@@ -505,6 +520,10 @@
         <div class="judge-persona">🐼 審査員パンダのコメント</div>
         <div class="judge-comment" id="judgeComment"></div>
         <div class="judge-caption">※お題ごとの典型的な形（縦横比・塗りの密度）との近さで採点する簡易判定です（本格的な画像認識AIではありません）</div>
+        <label class="hide-topic-toggle">
+          <input type="checkbox" id="chkHideTopic">
+          お題を隠して保存・シェア（見た人に当ててもらおう）
+        </label>
         <div class="result-actions">
           <button class="icon-btn" id="btnResultBack">↩ 戻って続ける</button>
           <button class="icon-btn" id="btnResultSave">保存(PNG)</button>
@@ -693,6 +712,7 @@
   var $btnResultHome = document.getElementById("btnResultHome");
   var $btnResultNext = document.getElementById("btnResultNext");
   var $resultPreviewImg = document.getElementById("resultPreviewImg");
+  var $chkHideTopic = document.getElementById("chkHideTopic");
 
   var $customColorInput = null;
 
@@ -1365,6 +1385,7 @@
     state.paused = false;
     state.zoom = 1;
     state.traceMode = false;
+    state.showTopicOnSave = true;
     if (state.animId !== null){
       cancelAnimationFrame(state.animId);
       state.animId = null;
@@ -1374,6 +1395,7 @@
     $btnPause.textContent = "⏸ 一時停止";
     $btnZoom.textContent = "🔍 1.0x";
     $btnTrace.textContent = "📝 なぞーる: OFF";
+    $chkHideTopic.checked = false;
     updateCamera();
     showScreen("home");
   }
@@ -1522,6 +1544,10 @@
 
   // Pauses the pen and switches to a dedicated full-screen result view
   // (instead of a modal) showing the score and the panda's comment.
+  function updateResultPreview(){
+    $resultPreviewImg.src = buildSaveCanvas().toDataURL("image/png");
+  }
+
   function showResultScreen(score){
     state.isDrawing = false;
     if (state.animId !== null){
@@ -1531,9 +1557,18 @@
     $judgeTopicLabel.textContent = $pictureTopic.textContent;
     $judgePercent.textContent = score + "%";
     $judgeComment.textContent = pickComment(score);
-    $resultPreviewImg.src = buildSaveCanvas().toDataURL("image/png");
+    $chkHideTopic.checked = !state.showTopicOnSave;
+    updateResultPreview();
     showScreen("result");
   }
+
+  // Lets people share a "guess what this is" doodle without giving the
+  // answer away in the image itself -- affects the save/share buttons both
+  // here and in the main icon row, since they share the same buildSaveCanvas().
+  $chkHideTopic.addEventListener("change", function(){
+    state.showTopicOnSave = !$chkHideTopic.checked;
+    updateResultPreview();
+  });
 
   $btnFinish.addEventListener("click", judgeDrawing);
   // Dismisses the result screen without starting a new round -- the
