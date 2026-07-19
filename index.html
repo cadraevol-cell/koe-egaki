@@ -128,6 +128,12 @@
     align-items: flex-start;
     line-height: 1.5;
   }
+  /* The text must be a single flex item (not raw text + <b> mixed directly
+     into the flex container), otherwise each text run between <b> tags
+     becomes its own anonymous flex item and lays out side-by-side instead
+     of wrapping together as one paragraph. min-width:0 lets it actually
+     shrink/wrap instead of overflowing (flex items default to min-width:auto). */
+  .howto-steps li > span{ min-width: 0; }
   .howto-steps li::before{
     content: counter(step);
     flex-shrink: 0;
@@ -287,14 +293,14 @@
   }
   .palette{
     flex: 0 0 auto;
-    width: 52px;
+    width: 68px;
     display:flex;
     flex-direction:column;
-    gap:6px;
+    gap:8px;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 14px;
-    padding: 6px;
+    padding: 8px;
     overflow-y: auto;
   }
   .swatch{
@@ -522,8 +528,30 @@
     100% { transform: translateY(115vh) rotate(360deg); opacity: 0; }
   }
 
+  .toast{
+    position: fixed;
+    left: 50%; bottom: 22px;
+    transform: translateX(-50%) translateY(16px);
+    max-width: calc(100% - 32px);
+    background: rgba(15,17,26,.94);
+    border: 1px solid var(--line);
+    color: #fff;
+    padding: 11px 20px;
+    border-radius: 999px;
+    font-size: .85rem;
+    text-align: center;
+    z-index: 300;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  .toast.show{
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
   @media (max-width: 640px){
-    .palette{ width: 46px; }
+    .palette{ width: 56px; }
   }
   @media (orientation: landscape) and (max-height: 480px){
     .howto{ display:none; }
@@ -543,10 +571,10 @@
     <div class="howto">
       <b>あそびかた</b>
       <ol class="howto-steps">
-        <li>声の<b>高さ</b>でペンが<b>上下</b>する（高い声＝上、低い声＝下）</li>
-        <li>ペンは自動で右へ進み続ける。右下のボタンを<b>長押し</b>しながら<b>声を出している間</b>だけ
-        色が塗られる（無音の間はボタンを押していてもペンが浮く）</li>
-        <li>描けたら「完成」を押すと、審査員パンダが判定してくれる</li>
+        <li><span>声の<b>高さ</b>でペンが<b>上下</b>する（高い声＝上、低い声＝下）</span></li>
+        <li><span>ペンは自動で右へ進み続ける。右下のボタンを<b>長押し</b>しながら<b>声を出している間</b>だけ
+        色が塗られる（無音の間はボタンを押していてもペンが浮く）</span></li>
+        <li><span>描けたら「完成」を押すと、審査員パンダが判定してくれる</span></li>
       </ol>
       <details class="howto-more">
         <summary>もっと詳しく</summary>
@@ -619,7 +647,7 @@
          anything else while playing, so they live together right by the
          thumb instead of being scattered into the utility rows above. -->
     <div class="quick-row">
-      <button class="icon-btn quick-btn" id="btnUndo">↺<br>元に戻る</button>
+      <button class="icon-btn quick-btn" id="btnUndo">↺<br>一つ戻す</button>
       <button class="icon-btn quick-btn" id="btnRotate">↻<br>0°</button>
     </div>
 
@@ -659,6 +687,8 @@
       </div>
     </div>
   </div>
+
+  <div class="toast" id="toast"></div>
 
 </div>
 
@@ -826,6 +856,7 @@
   var $result = document.getElementById("result");
   var $startBtn = document.getElementById("startBtn");
   var $homeMsg = document.getElementById("homeMsg");
+  var $toast = document.getElementById("toast");
 
   var $pictureTopic = document.getElementById("pictureTopic");
   var $mainBtn = document.getElementById("mainBtn");
@@ -877,6 +908,14 @@
   // UTIL
   // ---------------------------------------------------------
   function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+
+  var toastTimer = null;
+  function showToast(msg){
+    $toast.textContent = msg;
+    $toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ $toast.classList.remove("show"); }, 2600);
+  }
 
   function showScreen(name){
     state.screen = name;
@@ -1586,35 +1625,60 @@
 
   // Shares the finished drawing together with an invite back to the game
   // itself, so a share doesn't just show off the picture but also makes it
-  // one tap for whoever sees it to come play. The link is folded directly
-  // into the text (not just the separate `url` field) because several
-  // share targets silently drop `url` once `files` are also present.
+  // one tap for whoever sees it to come play.
   function buildShareText(){
     return $pictureTopic.textContent + " を声で描いてみた！\nみんなもやってみよう → " + location.href;
   }
 
+  function legacyShare(blob, text){
+    var file = new File([blob], "koeegaki_" + timestampStr() + ".png", { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })){
+      navigator.share({ files: [file], title: "こえ描き", text: text, url: location.href })
+        .catch(function(){ /* user cancelled or failed, ignore */ });
+    } else if (navigator.share){
+      navigator.share({ title: "こえ描き", text: text, url: location.href })
+        .catch(function(){ /* user cancelled or failed, ignore */ });
+    } else {
+      downloadPng();
+    }
+  }
+
+  // Primary path: copy the image AND the invite text to the clipboard in
+  // one go (a single ClipboardItem can hold multiple representations of
+  // the same content -- whatever app you paste into picks whichever type
+  // it understands), so sharing is just "copy, then paste wherever."
   function shareDrawing(){
     var out = buildSaveCanvas();
     out.toBlob(function(blob){
       if (!blob){ downloadPng(); return; }
-      var file = new File([blob], "koeegaki_" + timestampStr() + ".png", { type: "image/png" });
-      if (navigator.canShare && navigator.canShare({ files: [file] })){
-        navigator.share({
-          files: [file],
-          title: "こえ描き",
-          text: buildShareText(),
-          url: location.href
-        }).catch(function(){ /* user cancelled or failed, ignore */ });
-      } else if (navigator.share){
-        // This browser can share, just not image files -- still worth
-        // sharing the invite link/text on its own rather than giving up.
-        navigator.share({
-          title: "こえ描き",
-          text: buildShareText(),
-          url: location.href
-        }).catch(function(){ /* user cancelled or failed, ignore */ });
+      var text = buildShareText();
+
+      if (navigator.clipboard && window.ClipboardItem){
+        var items = {};
+        items[blob.type] = blob;
+        items["text/plain"] = new Blob([text], { type: "text/plain" });
+        navigator.clipboard.write([new ClipboardItem(items)]).then(function(){
+          showToast("画像とリンクをコピーしました！貼り付けてシェアしよう");
+        }).catch(function(){
+          // Some browsers support ClipboardItem but reject image types, or
+          // block the write outright (permissions) -- fall back gracefully
+          // rather than leaving the user with nothing.
+          if (navigator.clipboard.writeText){
+            navigator.clipboard.writeText(text).then(function(){
+              showToast("リンクをコピーしました！画像は保存します");
+              downloadPng();
+            }).catch(function(){ legacyShare(blob, text); });
+          } else {
+            legacyShare(blob, text);
+          }
+        });
+      } else if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(function(){
+          showToast("リンクをコピーしました！画像は保存します");
+          downloadPng();
+        }).catch(function(){ legacyShare(blob, text); });
       } else {
-        downloadPng();
+        legacyShare(blob, text);
       }
     }, "image/png");
   }
