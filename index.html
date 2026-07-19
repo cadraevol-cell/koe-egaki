@@ -1338,6 +1338,12 @@
         // actually over the drawable square (not the side zones)
         var localX = screenXToRealX(state.penX) - state.sideZoneW;
         var prevLocalX = screenXToRealX(state.prevPenX) - state.sideZoneW;
+        // state.penY is screen-space too (see screenYToRealY) -- without
+        // this conversion, ink would target the un-zoomed pitch position
+        // and could land outside whatever part of the canvas the camera is
+        // actually showing once zoomed in.
+        var localY = screenYToRealY(state.penY);
+        var prevLocalY = screenYToRealY(state.prevPenY);
         var overCanvasNow = localX >= 0 && localX <= state.canvasCssW;
         var overCanvasPrev = prevLocalX >= 0 && prevLocalX <= state.canvasCssW;
 
@@ -1349,8 +1355,8 @@
           // localX/localY are where the pen visually is, in its own normal
           // (rotation-unaware) frame -- convert to raw canvas pixels so the
           // ink actually lands there once 回転's CSS transform is applied.
-          var p0 = toRawCanvasXY(prevLocalX, state.prevPenY);
-          var p1 = toRawCanvasXY(localX, state.penY);
+          var p0 = toRawCanvasXY(prevLocalX, prevLocalY);
+          var p1 = toRawCanvasXY(localX, localY);
           drawSegment(p0.x, p0.y, p1.x, p1.y);
         }
       }
@@ -1401,13 +1407,16 @@
     return centerX + (screenX - centerX) / state.zoom;
   }
 
-  // The inverse of screenXToRealX, but for Y -- pitch drives state.penY
-  // directly in real canvas coordinates, so to know where to draw the pen
-  // icon on screen (Layer 2, never scaled) we need the forward transform.
-  function realYToScreenY(realY){
-    if (state.zoom <= 1) return realY;
+  // state.penY is ALSO screen-space, just like state.penX -- pitch maps to
+  // a Y position across the full viewport height (updatePitch), not the
+  // zoomed-in canvas. Without this, drawing at the raw pitch-mapped Y would
+  // land outside whatever slice of the canvas the camera is currently
+  // showing once zoomed in, since only screenXToRealX was accounting for
+  // zoom and Y was left as if it were already a real coordinate.
+  function screenYToRealY(screenY){
+    if (state.zoom <= 1) return screenY;
     var centerY = state.canvasCssH / 2;
-    return centerY + (realY - centerY) * state.zoom;
+    return centerY + (screenY - centerY) / state.zoom;
   }
 
   // 回転 (rotation) only spins canvas-wrap visually via CSS -- the pen's own
@@ -1430,13 +1439,13 @@
   // above the drawing canvas (spanning the full play area, side zones
   // included), so it never gets baked into the saved artwork. It is Layer 2
   // and is never scaled by zoom -- it's always drawn at its normal,
-  // un-magnified size, at the screen position state.penX already lives in
-  // (X) and realYToScreenY(state.penY) maps to (Y).
+  // un-magnified size, directly at the screen position state.penX/penY
+  // already live in (both are screen-space).
   function drawCursorOverlay(){
     cctx.clearRect(0, 0, state.playCssW, state.canvasCssH);
 
     var cx = state.penX;
-    var cy = realYToScreenY(state.penY);
+    var cy = state.penY;
     // Holding the button "arms" the pen, but ink only actually lays while
     // voiceActive is also true (see step()) -- reflect that here so the
     // pen visibly shows three states: up, armed-but-silent, and inking.
