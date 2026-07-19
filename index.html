@@ -1023,17 +1023,15 @@
     if (!emoji) return;
 
     guideCtx.save();
-    // canvas-wrap itself gets CSS-rotated by 回転 -- counter-rotate the
-    // glyph here so it still reads upright in the pen's normal (unrotated)
-    // frame. Position is untouched since the center maps to itself under
-    // any rotation.
-    guideCtx.translate(state.canvasCssW / 2, state.canvasCssH / 2);
-    guideCtx.rotate(-state.rotation * Math.PI / 180);
+    // Drawn in plain, un-rotated local coordinates on purpose: guideCanvas
+    // is a sibling of drawCanvas inside canvas-wrap, so it rides along with
+    // canvas-wrap's own CSS rotation automatically -- the guide behaves
+    // like a template printed on the page, turning together with the paper.
     guideCtx.filter = "grayscale(100%) opacity(20%)";
     guideCtx.textAlign = "center";
     guideCtx.textBaseline = "middle";
     guideCtx.font = Math.floor(state.canvasCssH * 0.62) + "px sans-serif";
-    guideCtx.fillText(emoji, 0, 0);
+    guideCtx.fillText(emoji, state.canvasCssW / 2, state.canvasCssH / 2);
     guideCtx.restore();
   }
 
