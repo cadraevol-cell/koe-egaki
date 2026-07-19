@@ -198,6 +198,18 @@
     overflow: hidden;
     border: 1px solid var(--line);
   }
+  /* Rotates the entire play area (canvas + side zones + pen) together as
+     one rigid unit in 90-degree steps. Its own box always holds the
+     UN-rotated internal layout (playCssW x canvasCssH); .play-wrap's own
+     box is sized to the ROTATED footprint, and this element is centered
+     and spun within it via JS (see resizeCanvas/updateRotation). Nothing
+     inside needs to know about rotation -- pen movement and ink placement
+     stay in the same local coordinates regardless of orientation. */
+  .rotator{
+    position: absolute;
+    top: 50%;
+    left: 50%;
+  }
   /* Layer 1 (the "world": canvas + side scenery) -- this is the layer that
      actually gets visually zoomed/panned. Layer 2 (the pen, #cursorCanvas)
      stays a sibling outside of .camera so it is never scaled -- it keeps
@@ -517,7 +529,10 @@
           ・マウスホイール（スマホは「🔍 ズーム」ボタン）で拡大すると、実際のペンの速さそのままで
           画面上ではゆっくり大きく動くので、細かい部分も狙いやすい。<br>
           ・キャンバス左右の半透明エリアは塗れないが、ここでも声の高さは反映されるので、
-          スタート前から音程を合わせておける。
+          スタート前から音程を合わせておける。<br>
+          ・「↻ 回転」を押すとキャンバス・側面エリア・ペンがまとめて90°ずつ回転する。回転させると、
+          ペンは画面の見た目通りに上下左右へ動くようになる（例えば90°回転させると、ペンは上下に動き、
+          声の高さで左右位置が変わる）。
         </div>
       </details>
     </div>
@@ -543,15 +558,17 @@
     <div class="main-area">
       <div class="canvas-area">
         <div class="play-wrap" id="playWrap">
-          <div class="camera" id="camera">
-            <div class="side-zone" id="leftZone"></div>
-            <div class="canvas-wrap" id="canvasWrap">
-              <canvas id="guideCanvas"></canvas>
-              <canvas id="drawCanvas"></canvas>
+          <div class="rotator" id="rotator">
+            <div class="camera" id="camera">
+              <div class="side-zone" id="leftZone"></div>
+              <div class="canvas-wrap" id="canvasWrap">
+                <canvas id="guideCanvas"></canvas>
+                <canvas id="drawCanvas"></canvas>
+              </div>
+              <div class="side-zone" id="rightZone"></div>
             </div>
-            <div class="side-zone" id="rightZone"></div>
+            <canvas id="cursorCanvas"></canvas>
           </div>
-          <canvas id="cursorCanvas"></canvas>
           <div class="pitch-indicator" id="pitchBadge">--- Hz</div>
         </div>
       </div>
@@ -572,6 +589,7 @@
         <button class="icon-btn" id="btnPause">⏸ 一時停止</button>
         <button class="icon-btn" id="btnZoom">🔍 1.0x</button>
         <button class="icon-btn" id="btnTrace">📝 なぞーる: ON</button>
+        <button class="icon-btn" id="btnRotate">↻ 0°</button>
       </div>
     </div>
 
@@ -744,6 +762,7 @@
     isDrawing: false, // is the button currently pressed
     paused: false,
     zoom: 1,
+    rotation: 0, // 0 | 90 | 180 | 270 -- rotates the whole play area
     traceMode: true,
     lastFrameTime: null,
     animId: null,
@@ -780,6 +799,7 @@
   var $mainBtn = document.getElementById("mainBtn");
   var $palette = document.getElementById("palette");
   var $playWrap = document.getElementById("playWrap");
+  var $rotator = document.getElementById("rotator");
   var $camera = document.getElementById("camera");
   var $leftZone = document.getElementById("leftZone");
   var $rightZone = document.getElementById("rightZone");
@@ -797,6 +817,7 @@
   var $sensSlider = document.getElementById("sensSlider");
   var $btnPause = document.getElementById("btnPause");
   var $btnTrace = document.getElementById("btnTrace");
+  var $btnRotate = document.getElementById("btnRotate");
   var $btnZoom = document.getElementById("btnZoom");
 
   var $btnUndo = document.getElementById("btnUndo");
@@ -895,18 +916,40 @@
 
     var area = document.querySelector(".canvas-area");
     var areaRect = area.getBoundingClientRect();
-    var totalWidthFactor = 1 + SIDE_ZONE_RATIO * 2;
-    var square = Math.max(40, Math.floor(Math.min(areaRect.height, areaRect.width / totalWidthFactor)));
-    var sideZoneW = Math.floor(square * SIDE_ZONE_RATIO);
+    // When rotated 90/270, the play area's long axis (with the side zones)
+    // needs to fit the viewport's *height* instead of its width, so swap
+    // which dimension constrains the layout.
+    var rotated = state.rotation === 90 || state.rotation === 270;
+    var availW = rotated ? areaRect.height : areaRect.width;
+    var availH = rotated ? areaRect.width : areaRect.height;
 
-    $playWrap.style.width = (square + sideZoneW * 2) + "px";
-    $playWrap.style.height = square + "px";
+    var totalWidthFactor = 1 + SIDE_ZONE_RATIO * 2;
+    var square = Math.max(40, Math.floor(Math.min(availH, availW / totalWidthFactor)));
+    var sideZoneW = Math.floor(square * SIDE_ZONE_RATIO);
+    var playW = square + sideZoneW * 2; // un-rotated internal width (playCssW)
+    var playH = square;                 // un-rotated internal height (canvasCssH)
+
+    // .play-wrap's own box is the ROTATED (on-screen) footprint...
+    if (rotated){
+      $playWrap.style.width = playH + "px";
+      $playWrap.style.height = playW + "px";
+    } else {
+      $playWrap.style.width = playW + "px";
+      $playWrap.style.height = playH + "px";
+    }
+    // ...while .rotator keeps the UN-rotated internal layout and is what
+    // actually spins, centered within .play-wrap.
+    $rotator.style.width = playW + "px";
+    $rotator.style.height = playH + "px";
+    $rotator.style.marginLeft = (-playW / 2) + "px";
+    $rotator.style.marginTop = (-playH / 2) + "px";
+    $rotator.style.transform = "rotate(" + state.rotation + "deg)";
+
     $leftZone.style.width = sideZoneW + "px";
     $rightZone.style.width = sideZoneW + "px";
     $canvasWrap.style.width = square + "px";
     $canvasWrap.style.height = square + "px";
 
-    var rect = $canvasWrap.getBoundingClientRect();
     var dpr = window.devicePixelRatio || 1;
 
     // Preserve drawing by copying old content
@@ -918,10 +961,10 @@
       old.getContext("2d").drawImage($canvas, 0, 0);
     }
 
-    state.canvasCssW = Math.max(1, Math.floor(rect.width));
-    state.canvasCssH = Math.max(1, Math.floor(rect.height));
+    state.canvasCssW = square;
+    state.canvasCssH = square;
     state.sideZoneW = sideZoneW;
-    state.playCssW = state.canvasCssW + sideZoneW * 2;
+    state.playCssW = playW;
     $canvas.width = Math.floor(state.canvasCssW * dpr);
     $canvas.height = Math.floor(state.canvasCssH * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1488,6 +1531,7 @@
     state.isDrawing = false;
     state.paused = false;
     state.zoom = 1;
+    state.rotation = 0;
     state.traceMode = true;
     state.showTopicOnSave = true;
     if (state.animId !== null){
@@ -1499,6 +1543,7 @@
     $btnPause.textContent = "⏸ 一時停止";
     $btnZoom.textContent = "🔍 1.0x";
     $btnTrace.textContent = "📝 なぞーる: ON";
+    $btnRotate.textContent = "↻ 0°";
     $chkHideTopic.checked = false;
     updateCamera();
     showScreen("home");
@@ -1564,6 +1609,21 @@
     state.traceMode = !state.traceMode;
     $btnTrace.textContent = state.traceMode ? "📝 なぞーる: ON" : "📝 なぞーる: OFF";
     drawGuide();
+  });
+
+  // ---------------------------------------------------------
+  // ROTATE (spins the whole play area -- canvas, side zones, and the pen --
+  // in 90-degree steps. Pen sweep / pitch-mapping logic never changes; only
+  // resizeCanvas()'s layout and .rotator's CSS transform do, so after a
+  // 90-degree turn the same "horizontal sweep" now reads as vertical on
+  // screen, and vice versa.)
+  // ---------------------------------------------------------
+  $btnRotate.addEventListener("click", function(){
+    state.rotation = (state.rotation + 90) % 360;
+    $btnRotate.textContent = "↻ " + state.rotation + "°";
+    resizeCanvas();
+    updateCamera();
+    drawCursorOverlay();
   });
 
   // ---------------------------------------------------------
@@ -1780,7 +1840,9 @@
     buildPalette();
     showScreen("game");
     state.zoom = 1;
+    state.rotation = 0;
     $btnZoom.textContent = "🔍 1.0x";
+    $btnRotate.textContent = "↻ 0°";
     requestAnimationFrame(function(){
       resizeCanvas();
       clearCanvas();
@@ -1802,10 +1864,12 @@
     state.isDrawing = false;
     state.paused = false;
     state.zoom = 1;
+    state.rotation = 0;
     $mainBtn.textContent = "スタート";
     $mainBtn.classList.remove("drawing-mode", "active-press");
     $btnPause.textContent = "⏸ 一時停止";
     $btnZoom.textContent = "🔍 1.0x";
+    $btnRotate.textContent = "↻ 0°";
     showScreen("game");
     requestAnimationFrame(function(){
       resizeCanvas();
