@@ -54,11 +54,18 @@
   #home h1{
     font-size: clamp(2rem, 8vw, 3.4rem);
     margin: 0 0 8px;
+    /* Solid, definitely-visible fallback color. Only browsers that confirm
+       support for background-clip:text (below) switch to the transparent
+       gradient-clip effect -- otherwise "color: transparent" alone would
+       render this title as fully invisible. */
+    color: var(--accent);
     background: linear-gradient(90deg, var(--accent), var(--accent2));
     -webkit-background-clip: text;
     background-clip: text;
-    color: transparent;
     letter-spacing: 1px;
+  }
+  @supports (background-clip: text) or (-webkit-background-clip: text){
+    #home h1{ color: transparent; }
   }
   #home p.desc{
     color: var(--sub);
@@ -385,6 +392,22 @@
   }
   .ctrl-toggles .icon-btn{ flex: 1 1 auto; text-align: center; }
 
+  /* The two most-pressed buttons during an active round (undo and rotate),
+     placed right next to the main draw button for quick thumb access. */
+  .quick-row{
+    flex: 0 0 auto;
+    display: flex;
+    gap: 8px;
+  }
+  .quick-btn{
+    flex: 1 1 auto;
+    min-height: 50px;
+    font-size: .85rem;
+    font-weight: 700;
+    line-height: 1.3;
+    text-align: center;
+  }
+
   /* ---------- result screen ---------- */
   #result{
     align-items: center; justify-content: center;
@@ -432,10 +455,10 @@
     font-size: 2.1rem;
     font-weight: 900;
     margin-bottom: 14px;
+    color: var(--good); /* fallback -- see #home h1 for why */
     background: linear-gradient(90deg, var(--good), var(--accent));
     -webkit-background-clip: text;
     background-clip: text;
-    color: transparent;
   }
   .judge-label{ font-size:.75rem; color:var(--sub); letter-spacing:1px; }
   .judge-topic{ font-size:1.1rem; font-weight:800; margin-top:2px; }
@@ -443,10 +466,13 @@
     font-size: 3.2rem;
     font-weight: 900;
     margin: 12px 0 4px;
+    color: var(--accent); /* fallback -- see #home h1 for why */
     background: linear-gradient(90deg, var(--accent), var(--accent2));
     -webkit-background-clip: text;
     background-clip: text;
-    color: transparent;
+  }
+  @supports (background-clip: text) or (-webkit-background-clip: text){
+    .result-title, .judge-percent{ color: transparent; }
   }
   .best-score{ font-size: .78rem; color: var(--good); font-weight: 700; margin-bottom: 10px; min-height: 1.2em; }
   .judge-persona{ font-size:.8rem; color:var(--sub); margin-bottom:6px; }
@@ -546,7 +572,6 @@
         <div class="value" id="pictureTopic">-</div>
       </div>
       <div class="icon-btn-row">
-        <button class="icon-btn" id="btnUndo">↺ 元に戻る</button>
         <button class="icon-btn" id="btnClear">クリア</button>
         <button class="icon-btn" id="btnSave">保存(PNG)</button>
         <button class="icon-btn" id="btnShare">シェア</button>
@@ -587,8 +612,15 @@
         <button class="icon-btn" id="btnPause">⏸ 一時停止</button>
         <button class="icon-btn" id="btnZoom">🔍 1.0x</button>
         <button class="icon-btn" id="btnTrace">📝 なぞーる: ON</button>
-        <button class="icon-btn" id="btnRotate">↻ 0°</button>
       </div>
+    </div>
+
+    <!-- Actual usage showed 描く / 回転 / 元に戻る get pressed far more than
+         anything else while playing, so they live together right by the
+         thumb instead of being scattered into the utility rows above. -->
+    <div class="quick-row">
+      <button class="icon-btn quick-btn" id="btnUndo">↺<br>元に戻る</button>
+      <button class="icon-btn quick-btn" id="btnRotate">↻<br>0°</button>
     </div>
 
     <div class="bottombar">
@@ -617,6 +649,7 @@
         <div class="result-actions">
           <button class="icon-btn" id="btnResultBack">↩ 戻って続ける</button>
           <button class="icon-btn" id="btnResultSave">保存(PNG)</button>
+          <button class="icon-btn" id="btnResultShare">📤 シェア</button>
           <button class="icon-btn" id="btnResultHome">🏠 タイトルへ戻る</button>
           <button class="big-btn" id="btnResultNext">🔄 次のお題へ</button>
         </div>
@@ -831,6 +864,7 @@
   var $judgeComment = document.getElementById("judgeComment");
   var $btnResultBack = document.getElementById("btnResultBack");
   var $btnResultSave = document.getElementById("btnResultSave");
+  var $btnResultShare = document.getElementById("btnResultShare");
   var $btnResultHome = document.getElementById("btnResultHome");
   var $btnResultNext = document.getElementById("btnResultNext");
   var $resultPreviewImg = document.getElementById("resultPreviewImg");
@@ -1550,22 +1584,43 @@
   $btnSave.addEventListener("click", downloadPng);
   $btnResultSave.addEventListener("click", downloadPng);
 
-  $btnShare.addEventListener("click", function(){
+  // Shares the finished drawing together with an invite back to the game
+  // itself, so a share doesn't just show off the picture but also makes it
+  // one tap for whoever sees it to come play. The link is folded directly
+  // into the text (not just the separate `url` field) because several
+  // share targets silently drop `url` once `files` are also present.
+  function buildShareText(){
+    return $pictureTopic.textContent + " を声で描いてみた！\nみんなもやってみよう → " + location.href;
+  }
+
+  function shareDrawing(){
     var out = buildSaveCanvas();
     out.toBlob(function(blob){
-      if (!blob) return;
+      if (!blob){ downloadPng(); return; }
       var file = new File([blob], "koeegaki_" + timestampStr() + ".png", { type: "image/png" });
       if (navigator.canShare && navigator.canShare({ files: [file] })){
         navigator.share({
           files: [file],
           title: "こえ描き",
-          text: $pictureTopic.textContent + " を声で描いてみた！"
+          text: buildShareText(),
+          url: location.href
+        }).catch(function(){ /* user cancelled or failed, ignore */ });
+      } else if (navigator.share){
+        // This browser can share, just not image files -- still worth
+        // sharing the invite link/text on its own rather than giving up.
+        navigator.share({
+          title: "こえ描き",
+          text: buildShareText(),
+          url: location.href
         }).catch(function(){ /* user cancelled or failed, ignore */ });
       } else {
         downloadPng();
       }
     }, "image/png");
-  });
+  }
+
+  $btnShare.addEventListener("click", shareDrawing);
+  $btnResultShare.addEventListener("click", shareDrawing);
 
   $btnReroll.addEventListener("click", function(){
     rerollTopic();
