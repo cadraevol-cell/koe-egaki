@@ -218,7 +218,10 @@
     border-radius: 14px;
     overflow: hidden;
     border: 1px solid var(--line);
+    touch-action: none;
   }
+  .play-wrap.zoomed-pannable{ cursor: grab; }
+  .play-wrap.zoomed-pannable.panning{ cursor: grabbing; }
   /* Layer 1 (the "world": canvas + side scenery) -- this is the layer that
      actually gets visually zoomed/panned. Layer 2 (the pen, #cursorCanvas)
      stays a sibling outside of .camera so it is never scaled -- it keeps
@@ -582,7 +585,8 @@
         <div class="howto-more-body">
           ・「⏸ 一時停止」でペンの動きを完全に止められる。<br>
           ・マウスホイール（スマホは「🔍 ズーム」ボタン）で拡大すると、実際のペンの速さそのままで
-          画面上ではゆっくり大きく動くので、細かい部分も狙いやすい。<br>
+          画面上ではゆっくり大きく動くので、細かい部分も狙いやすい。ズーム中はドラッグ（指でも）で
+          キャンバスの好きな場所に視点を動かせる。<br>
           ・キャンバス左右の半透明エリアは塗れないが、ここでも声の高さは反映されるので、
           スタート前から音程を合わせておける。<br>
           ・「↻ 回転」は0°→90°→180°→270°を繰り返す。保存・シェアする画像も、画面で実際に
@@ -823,6 +827,7 @@
     isDrawing: false, // is the button currently pressed
     paused: false,
     zoom: 1,
+    panX: 0, panY: 0, // zoom focus point (real canvas coords), see setPan()
     rotation: 0, // 0 | 90 | 180 | 270 -- rotates the whole play area
     traceMode: true,
     lastFrameTime: null,
@@ -1379,10 +1384,12 @@
     ctx.stroke();
   }
 
-  // Zoom always magnifies around the fixed center of the play area -- the
-  // camera never chases the pen (that would make the pen's on-screen speed
-  // change with zoom, which is exactly what we don't want here). Layer 2
-  // (the pen, #cursorCanvas) is a sibling of .camera and is never scaled by
+  // Zoom magnifies around a "focus point" (state.panX/panY, in real canvas
+  // coordinates) instead of always the play area's fixed center -- see
+  // setPan() below, which drag-to-pan updates while zoomed in. The camera
+  // never chases the pen itself (that would make the pen's on-screen speed
+  // change with zoom, which is exactly what we don't want). Layer 2 (the
+  // pen, #cursorCanvas) is a sibling of .camera and is never scaled by
   // this transform -- see drawCursorOverlay.
   function updateCamera(){
     if (state.zoom <= 1){
@@ -1390,33 +1397,47 @@
       return;
     }
     var z = state.zoom;
-    var centerX = state.playCssW / 2;
-    var centerY = state.canvasCssH / 2;
-    var tx = state.playCssW / (2 * z) - centerX;
-    var ty = state.canvasCssH / (2 * z) - centerY;
+    var tx = state.playCssW / (2 * z) - state.panX;
+    var ty = state.canvasCssH / (2 * z) - state.panY;
     $camera.style.transform = "scale(" + z + ") translate(" + tx + "px, " + ty + "px)";
+  }
+
+  // Moves the zoom focus point, clamped so the camera never shows blank
+  // space beyond the canvas/side-zones -- i.e. you can pan to any part of
+  // the play area, but never past its edges. Call this (not updateCamera
+  // directly) whenever panX/panY or zoom change, so the clamp is always
+  // re-applied against the current zoom level.
+  function setPan(x, y){
+    if (state.zoom <= 1){
+      state.panX = state.playCssW / 2;
+      state.panY = state.canvasCssH / 2;
+    } else {
+      var halfViewW = state.playCssW / (2 * state.zoom);
+      var halfViewH = state.canvasCssH / (2 * state.zoom);
+      state.panX = Math.min(state.playCssW - halfViewW, Math.max(halfViewW, x));
+      state.panY = Math.min(state.canvasCssH - halfViewH, Math.max(halfViewH, y));
+    }
+    updateCamera();
   }
 
   // state.penX is a SCREEN-space coordinate (it always sweeps edge-to-edge
   // of the viewport at a constant real-time speed, see step()). To know
-  // where that actually lands on the (possibly zoomed) canvas, invert the
-  // same fixed-center transform updateCamera() applies to Layer 1.
+  // where that actually lands on the (possibly zoomed/panned) canvas,
+  // invert the same transform updateCamera() applies to Layer 1.
   function screenXToRealX(screenX){
     if (state.zoom <= 1) return screenX;
-    var centerX = state.playCssW / 2;
-    return centerX + (screenX - centerX) / state.zoom;
+    return state.panX + (screenX - state.playCssW / 2) / state.zoom;
   }
 
   // state.penY is ALSO screen-space, just like state.penX -- pitch maps to
   // a Y position across the full viewport height (updatePitch), not the
   // zoomed-in canvas. Without this, drawing at the raw pitch-mapped Y would
   // land outside whatever slice of the canvas the camera is currently
-  // showing once zoomed in, since only screenXToRealX was accounting for
-  // zoom and Y was left as if it were already a real coordinate.
+  // showing once zoomed/panned in, since only screenXToRealX was
+  // accounting for it and Y was left as if it were already a real coordinate.
   function screenYToRealY(screenY){
     if (state.zoom <= 1) return screenY;
-    var centerY = state.canvasCssH / 2;
-    return centerY + (screenY - centerY) / state.zoom;
+    return state.panY + (screenY - state.canvasCssH / 2) / state.zoom;
   }
 
   // 回転 (rotation) only spins canvas-wrap visually via CSS -- the pen's own
@@ -1722,6 +1743,7 @@
     $btnTrace.textContent = "📝 なぞーる: ON";
     $btnRotate.textContent = "↻ 0°";
     $canvasWrap.style.transform = "";
+    $playWrap.classList.remove("zoomed-pannable", "panning");
     $chkHideTopic.checked = false;
     updateCamera();
     showScreen("home");
@@ -1766,7 +1788,10 @@
   function applyZoom(newZoom){
     state.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newZoom));
     $btnZoom.textContent = "🔍 " + state.zoom.toFixed(1) + "x";
-    updateCamera();
+    $playWrap.classList.toggle("zoomed-pannable", state.zoom > 1.01);
+    // Re-clamps panX/panY against the new zoom level (the valid pan range
+    // shrinks as you zoom out) and re-applies the camera transform.
+    setPan(state.panX, state.panY);
     drawCursorOverlay();
   }
 
@@ -1782,6 +1807,41 @@
     var factor = Math.exp(-e.deltaY * 0.0015);
     applyZoom(state.zoom * factor);
   }, { passive: false });
+
+  // Drag-to-pan while zoomed in -- the play area itself has no other
+  // pointer interaction (drawing happens via the 描く button, not by
+  // touching the canvas), so it's free to use for this. Only active once
+  // zoomed past 1x, since there's nothing to pan around at 1x.
+  var panDrag = null;
+  $playWrap.addEventListener("pointerdown", function(e){
+    if (state.zoom <= 1.01) return;
+    panDrag = {
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startPanX: state.panX,
+      startPanY: state.panY
+    };
+    $playWrap.setPointerCapture(e.pointerId);
+    $playWrap.classList.add("panning");
+  });
+  $playWrap.addEventListener("pointermove", function(e){
+    if (!panDrag || e.pointerId !== panDrag.pointerId) return;
+    // Dragging right should reveal canvas content to the left, so the pan
+    // point moves opposite to the drag, scaled down by zoom (screen pixels
+    // dragged always correspond to fewer real canvas pixels once zoomed in).
+    var dxReal = -(e.clientX - panDrag.startClientX) / state.zoom;
+    var dyReal = -(e.clientY - panDrag.startClientY) / state.zoom;
+    setPan(panDrag.startPanX + dxReal, panDrag.startPanY + dyReal);
+  });
+  function endPanDrag(e){
+    if (panDrag && (!e || e.pointerId === panDrag.pointerId)){
+      panDrag = null;
+      $playWrap.classList.remove("panning");
+    }
+  }
+  $playWrap.addEventListener("pointerup", endPanDrag);
+  $playWrap.addEventListener("pointercancel", endPanDrag);
 
   $btnTrace.addEventListener("click", function(){
     state.traceMode = !state.traceMode;
@@ -2020,12 +2080,13 @@
     state.rotation = 0;
     $btnZoom.textContent = "🔍 1.0x";
     $btnRotate.textContent = "↻ 0°";
+    $playWrap.classList.remove("zoomed-pannable", "panning");
     requestAnimationFrame(function(){
       resizeCanvas();
       clearCanvas();
       rerollTopic();
       resetPenToStart();
-      updateCamera();
+      setPan(0, 0); // zoom is already reset to 1 here, so this just centers
       drawCursorOverlay();
       // the loop runs from the moment the game screen appears, so the pen
       // already tracks pitch (vertically) before スタート is pressed
@@ -2047,13 +2108,14 @@
     $btnPause.textContent = "⏸ 一時停止";
     $btnZoom.textContent = "🔍 1.0x";
     $btnRotate.textContent = "↻ 0°";
+    $playWrap.classList.remove("zoomed-pannable", "panning");
     showScreen("game");
     requestAnimationFrame(function(){
       resizeCanvas();
       clearCanvas();
       rerollTopic();
       resetPenToStart();
-      updateCamera();
+      setPan(0, 0); // zoom is already reset to 1 here, so this just centers
       drawCursorOverlay();
       startLoop();
     });
@@ -2088,7 +2150,7 @@
   function handleResize(){
     if (state.screen === "game"){
       resizeCanvas();
-      updateCamera();
+      setPan(state.panX, state.panY); // re-clamp against the new dimensions
       if (state.gameState !== "playing"){
         drawCursorOverlay();
       }
