@@ -16,7 +16,14 @@
     --line: #2e3444;
     --good: #4ade80;
   }
-  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  *{
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    /* iOS shows a callout (magnifier / "Save Image"-style menu) on a long
+       press unless this is off -- without it, a long press on the 描く
+       button or a swatch can get hijacked by that system UI mid-draw. */
+    -webkit-touch-callout: none;
+  }
   html, body{
     margin:0; padding:0; width:100%; height:100%;
     background: var(--bg); color: var(--text);
@@ -24,6 +31,7 @@
     overscroll-behavior: none;
     user-select: none;
     -webkit-user-select: none;
+    touch-action: manipulation;
   }
   #app{ width:100%; height:100%; position:relative; overflow:hidden; }
   .screen{
@@ -1041,12 +1049,24 @@
   // AUDIO / PITCH DETECTION
   // ---------------------------------------------------------
   function initAudio(){
+    // Some mobile browsers reject an over-specific constraint set outright
+    // (OverconstrainedError) instead of just ignoring the parts they don't
+    // support. Try the tuned constraints first, and fall back to a bare
+    // "audio: true" request if that fails, rather than failing to start at
+    // all on a device that just doesn't like these particular constraints.
     return navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false
       }
+    }).catch(function(err){
+      // Only retry with looser constraints for a constraint-related
+      // rejection -- a real permission denial should surface immediately.
+      if (err && err.name === "OverconstrainedError"){
+        return navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+      throw err;
     }).then(function(stream){
       state.micStream = stream;
       var AC = window.AudioContext || window.webkitAudioContext;
@@ -1072,6 +1092,14 @@
       state.audioCtx.resume();
     }
   }
+
+  // iOS can leave the AudioContext stuck "suspended" if resume() didn't
+  // happen inside a truly synchronous user-gesture handler -- the initial
+  // getUserMedia()+AudioContext creation happens *after* an async
+  // permission prompt, which doesn't always count as one. Retrying on
+  // every tap anywhere is a no-op once it's actually running, and
+  // reliably unsticks it if the first attempt didn't take.
+  document.addEventListener("pointerdown", resumeAudioIfNeeded, { passive: true });
 
   // Autocorrelation-based pitch detection
   function detectPitch(buf, sampleRate){
