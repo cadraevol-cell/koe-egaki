@@ -198,18 +198,6 @@
     overflow: hidden;
     border: 1px solid var(--line);
   }
-  /* Rotates the entire play area (canvas + side zones + pen) together as
-     one rigid unit in 90-degree steps. Its own box always holds the
-     UN-rotated internal layout (playCssW x canvasCssH); .play-wrap's own
-     box is sized to the ROTATED footprint, and this element is centered
-     and spun within it via JS (see resizeCanvas/updateRotation). Nothing
-     inside needs to know about rotation -- pen movement and ink placement
-     stay in the same local coordinates regardless of orientation. */
-  .rotator{
-    position: absolute;
-    top: 50%;
-    left: 50%;
-  }
   /* Layer 1 (the "world": canvas + side scenery) -- this is the layer that
      actually gets visually zoomed/panned. Layer 2 (the pen, #cursorCanvas)
      stays a sibling outside of .camera so it is never scaled -- it keeps
@@ -247,6 +235,10 @@
     background: linear-gradient(180deg, #9cc496, #6f9c68);
     clip-path: polygon(0% 100%, 0% 58%, 22% 26%, 40% 52%, 58% 16%, 78% 46%, 100% 22%, 100% 100%);
   }
+  /* Only this square (guideCanvas + drawCanvas) ever gets visually spun by
+     "回転" -- side zones, the pen, and everything else are untouched. Since
+     it's a square, rotating it around its own center never changes its
+     bounding box, so no other layout needs to react to this. */
   .canvas-wrap{
     position: relative;
     flex-shrink: 0;
@@ -530,9 +522,8 @@
           画面上ではゆっくり大きく動くので、細かい部分も狙いやすい。<br>
           ・キャンバス左右の半透明エリアは塗れないが、ここでも声の高さは反映されるので、
           スタート前から音程を合わせておける。<br>
-          ・「↻ 回転」を押すとキャンバス・側面エリア・ペンがまとめて90°ずつ回転する。回転させると、
-          ペンは画面の見た目通りに上下左右へ動くようになる（例えば90°回転させると、ペンは上下に動き、
-          声の高さで左右位置が変わる）。
+          ・「↻ 回転」を押すとキャンバスだけが90°ずつ回転する（側面エリアやペンの動きは変わらない）。
+          ペンはこれまで通り左から右へ自動で進み、声の高さで上下する。
         </div>
       </details>
     </div>
@@ -558,17 +549,15 @@
     <div class="main-area">
       <div class="canvas-area">
         <div class="play-wrap" id="playWrap">
-          <div class="rotator" id="rotator">
-            <div class="camera" id="camera">
-              <div class="side-zone" id="leftZone"></div>
-              <div class="canvas-wrap" id="canvasWrap">
-                <canvas id="guideCanvas"></canvas>
-                <canvas id="drawCanvas"></canvas>
-              </div>
-              <div class="side-zone" id="rightZone"></div>
+          <div class="camera" id="camera">
+            <div class="side-zone" id="leftZone"></div>
+            <div class="canvas-wrap" id="canvasWrap">
+              <canvas id="guideCanvas"></canvas>
+              <canvas id="drawCanvas"></canvas>
             </div>
-            <canvas id="cursorCanvas"></canvas>
+            <div class="side-zone" id="rightZone"></div>
           </div>
+          <canvas id="cursorCanvas"></canvas>
           <div class="pitch-indicator" id="pitchBadge">--- Hz</div>
         </div>
       </div>
@@ -799,7 +788,6 @@
   var $mainBtn = document.getElementById("mainBtn");
   var $palette = document.getElementById("palette");
   var $playWrap = document.getElementById("playWrap");
-  var $rotator = document.getElementById("rotator");
   var $camera = document.getElementById("camera");
   var $leftZone = document.getElementById("leftZone");
   var $rightZone = document.getElementById("rightZone");
@@ -916,39 +904,21 @@
 
     var area = document.querySelector(".canvas-area");
     var areaRect = area.getBoundingClientRect();
-    // When rotated 90/270, the play area's long axis (with the side zones)
-    // needs to fit the viewport's *height* instead of its width, so swap
-    // which dimension constrains the layout.
-    var rotated = state.rotation === 90 || state.rotation === 270;
-    var availW = rotated ? areaRect.height : areaRect.width;
-    var availH = rotated ? areaRect.width : areaRect.height;
-
     var totalWidthFactor = 1 + SIDE_ZONE_RATIO * 2;
-    var square = Math.max(40, Math.floor(Math.min(availH, availW / totalWidthFactor)));
+    var square = Math.max(40, Math.floor(Math.min(areaRect.height, areaRect.width / totalWidthFactor)));
     var sideZoneW = Math.floor(square * SIDE_ZONE_RATIO);
-    var playW = square + sideZoneW * 2; // un-rotated internal width (playCssW)
-    var playH = square;                 // un-rotated internal height (canvasCssH)
+    var playW = square + sideZoneW * 2; // playCssW
+    var playH = square;                 // canvasCssH
 
-    // .play-wrap's own box is the ROTATED (on-screen) footprint...
-    if (rotated){
-      $playWrap.style.width = playH + "px";
-      $playWrap.style.height = playW + "px";
-    } else {
-      $playWrap.style.width = playW + "px";
-      $playWrap.style.height = playH + "px";
-    }
-    // ...while .rotator keeps the UN-rotated internal layout and is what
-    // actually spins, centered within .play-wrap.
-    $rotator.style.width = playW + "px";
-    $rotator.style.height = playH + "px";
-    $rotator.style.marginLeft = (-playW / 2) + "px";
-    $rotator.style.marginTop = (-playH / 2) + "px";
-    $rotator.style.transform = "rotate(" + state.rotation + "deg)";
-
+    $playWrap.style.width = playW + "px";
+    $playWrap.style.height = playH + "px";
     $leftZone.style.width = sideZoneW + "px";
     $rightZone.style.width = sideZoneW + "px";
     $canvasWrap.style.width = square + "px";
     $canvasWrap.style.height = square + "px";
+    // 回転 only ever spins this square in place -- rotating it doesn't
+    // change its bounding box, so nothing else in the layout needs to react.
+    $canvasWrap.style.transform = state.rotation ? "rotate(" + state.rotation + "deg)" : "";
 
     var dpr = window.devicePixelRatio || 1;
 
@@ -1053,11 +1023,17 @@
     if (!emoji) return;
 
     guideCtx.save();
+    // canvas-wrap itself gets CSS-rotated by 回転 -- counter-rotate the
+    // glyph here so it still reads upright in the pen's normal (unrotated)
+    // frame. Position is untouched since the center maps to itself under
+    // any rotation.
+    guideCtx.translate(state.canvasCssW / 2, state.canvasCssH / 2);
+    guideCtx.rotate(-state.rotation * Math.PI / 180);
     guideCtx.filter = "grayscale(100%) opacity(20%)";
     guideCtx.textAlign = "center";
     guideCtx.textBaseline = "middle";
     guideCtx.font = Math.floor(state.canvasCssH * 0.62) + "px sans-serif";
-    guideCtx.fillText(emoji, state.canvasCssW / 2, state.canvasCssH / 2);
+    guideCtx.fillText(emoji, 0, 0);
     guideCtx.restore();
   }
 
@@ -1261,7 +1237,12 @@
         var overCanvasPrev = prevLocalX >= 0 && prevLocalX <= state.canvasCssW;
 
         if (state.isDrawing && !wrapped && overCanvasNow && overCanvasPrev){
-          drawSegment(prevLocalX, state.prevPenY, localX, state.penY);
+          // localX/localY are where the pen visually is, in its own normal
+          // (rotation-unaware) frame -- convert to raw canvas pixels so the
+          // ink actually lands there once 回転's CSS transform is applied.
+          var p0 = toRawCanvasXY(prevLocalX, state.prevPenY);
+          var p1 = toRawCanvasXY(localX, state.penY);
+          drawSegment(p0.x, p0.y, p1.x, p1.y);
         }
       }
       state.prevPenX = state.penX;
@@ -1320,6 +1301,22 @@
     return centerY + (realY - centerY) * state.zoom;
   }
 
+  // 回転 (rotation) only spins canvas-wrap visually via CSS -- the pen's own
+  // position (lx, ly) is always computed in the normal, un-rotated frame.
+  // To make ink actually land under the pen despite the display rotation,
+  // convert that visual position into the RAW pixel coordinates that, once
+  // canvas-wrap's CSS rotation is applied, will appear at (lx, ly). This is
+  // the inverse of a rotate(state.rotation) around the square's center.
+  function toRawCanvasXY(lx, ly){
+    var s = state.canvasCssW; // canvas-wrap is always square
+    switch (state.rotation){
+      case 90:  return { x: ly, y: s - lx };
+      case 180: return { x: s - lx, y: s - ly };
+      case 270: return { x: s - ly, y: lx };
+      default:  return { x: lx, y: ly };
+    }
+  }
+
   // The pen cursor is drawn on a separate transparent overlay canvas stacked
   // above the drawing canvas (spanning the full play area, side zones
   // included), so it never gets baked into the saved artwork. It is Layer 2
@@ -1333,12 +1330,6 @@
     var cy = realYToScreenY(state.penY);
     cctx.save();
     cctx.translate(cx, cy);
-    // #cursorCanvas lives inside .rotator, so it gets spun by the same CSS
-    // transform as the canvas underneath it. Counter-rotate here so the pen
-    // graphic itself always stays upright on screen -- only its position
-    // (and the sweep direction that drives it) is affected by rotation,
-    // never how the pen itself looks.
-    cctx.rotate(-state.rotation * Math.PI / 180);
     cctx.rotate(Math.PI / 5.5);
 
     if (state.isDrawing){
@@ -1467,7 +1458,18 @@
     // なぞーる guide (guideCanvas), which is a separate layer never captured.
     octx.fillStyle = "#ffffff";
     octx.fillRect(0, 0, out.width, out.height);
+    // drawCanvas stores ink pre-compensated for 回転 (see toRawCanvasXY), so
+    // it matches what's on screen only once canvas-wrap's own CSS rotation
+    // is applied. Re-apply that same rotation here so the exported PNG
+    // matches what was actually visible while drawing, not the raw buffer.
+    octx.save();
+    if (state.rotation){
+      octx.translate(out.width / 2, out.height / 2);
+      octx.rotate(state.rotation * Math.PI / 180);
+      octx.translate(-out.width / 2, -out.height / 2);
+    }
     octx.drawImage($canvas, 0, 0);
+    octx.restore();
 
     if (state.showTopicOnSave && $pictureTopic.textContent){
       var fontSize = 16 * dpr;
@@ -1550,6 +1552,7 @@
     $btnZoom.textContent = "🔍 1.0x";
     $btnTrace.textContent = "📝 なぞーる: ON";
     $btnRotate.textContent = "↻ 0°";
+    $canvasWrap.style.transform = "";
     $chkHideTopic.checked = false;
     updateCamera();
     showScreen("home");
@@ -1618,18 +1621,17 @@
   });
 
   // ---------------------------------------------------------
-  // ROTATE (spins the whole play area -- canvas, side zones, and the pen --
-  // in 90-degree steps. Pen sweep / pitch-mapping logic never changes; only
-  // resizeCanvas()'s layout and .rotator's CSS transform do, so after a
-  // 90-degree turn the same "horizontal sweep" now reads as vertical on
-  // screen, and vice versa.)
+  // ROTATE (spins only the square canvas -- side zones and the pen are
+  // completely unaffected. The pen keeps sweeping left-to-right and moving
+  // vertically with pitch exactly as always; only where ink actually lands
+  // on the canvas's own pixels is adjusted, via toRawCanvasXY, so it still
+  // visually appears right where the pen is.)
   // ---------------------------------------------------------
   $btnRotate.addEventListener("click", function(){
     state.rotation = (state.rotation + 90) % 360;
     $btnRotate.textContent = "↻ " + state.rotation + "°";
-    resizeCanvas();
-    updateCamera();
-    drawCursorOverlay();
+    $canvasWrap.style.transform = state.rotation ? "rotate(" + state.rotation + "deg)" : "";
+    drawGuide();
   });
 
   // ---------------------------------------------------------
