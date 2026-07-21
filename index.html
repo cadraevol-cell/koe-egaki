@@ -283,6 +283,9 @@
   #guideCanvas{
     pointer-events: none;
   }
+  /* Doubles as a "is my mic even working?" indicator -- the single most
+     common onboarding failure is a too-quiet mic silently reading as
+     permanent silence, so voice-detected needs to be loudly visible. */
   .pitch-indicator{
     position: absolute;
     top: 8px; right: 8px;
@@ -293,6 +296,11 @@
     border-radius: 8px;
     pointer-events: none;
     z-index: 5;
+    transition: background .15s ease;
+  }
+  .pitch-indicator.voice-on{
+    background: rgba(34,165,99,.9);
+    font-weight: 700;
   }
   .palette{
     flex: 0 0 auto;
@@ -396,10 +404,18 @@
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
-    padding-top: 2px;
-    border-top: 1px solid var(--line);
   }
   .ctrl-toggles .icon-btn{ flex: 1 1 auto; text-align: center; }
+  .ctrl-toggles .icon-btn.active-toggle{ background: #38405a; border-color: var(--accent); }
+  .slider-panel{
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+  }
+  .slider-panel[hidden]{ display: none; }
 
   /* The two most-pressed buttons during an active round (undo and rotate),
      placed right next to the main draw button for quick thumb access. */
@@ -555,6 +571,10 @@
 
   @media (max-width: 640px){
     .palette{ width: 56px; }
+    /* On a narrow screen the drawing IS the payoff -- show it first,
+       before the score/comment/button stack. */
+    .result-card{ flex-direction: column; }
+    .result-preview{ order: -1; max-width: 210px; }
   }
   @media (orientation: landscape) and (max-height: 480px){
     .howto{ display:none; }
@@ -624,26 +644,31 @@
             <div class="side-zone" id="rightZone"></div>
           </div>
           <canvas id="cursorCanvas"></canvas>
-          <div class="pitch-indicator" id="pitchBadge">--- Hz</div>
+          <div class="pitch-indicator" id="pitchBadge">🔇 こえ待ち</div>
         </div>
       </div>
       <div class="palette" id="palette"></div>
     </div>
 
     <div class="controls-row">
-      <label class="ctrl">ペンの速さ
-        <input type="range" id="speedSlider" min="80" max="600" step="20" value="260">
-      </label>
-      <label class="ctrl">ペンの太さ
-        <input type="range" id="widthSlider" min="2" max="30" step="1" value="6">
-      </label>
-      <label class="ctrl">声の感度（音域幅）
-        <input type="range" id="sensSlider" min="60" max="500" step="10" value="150">
-      </label>
       <div class="ctrl-toggles">
         <button class="icon-btn" id="btnPause">⏸ 一時停止</button>
         <button class="icon-btn" id="btnZoom">🔍 1.0x</button>
         <button class="icon-btn" id="btnTrace">📝 なぞーる: ON</button>
+        <button class="icon-btn" id="btnTune">⚙ 調整</button>
+      </div>
+      <!-- The three sliders are pre-round tuning, not in-round moves --
+           collapsed by default so the canvas gets the vertical space. -->
+      <div class="slider-panel" id="sliderPanel" hidden>
+        <label class="ctrl">ペンの速さ
+          <input type="range" id="speedSlider" min="80" max="600" step="20" value="260">
+        </label>
+        <label class="ctrl">ペンの太さ
+          <input type="range" id="widthSlider" min="2" max="30" step="1" value="6">
+        </label>
+        <label class="ctrl">声の感度（音域幅）
+          <input type="range" id="sensSlider" min="60" max="500" step="10" value="150">
+        </label>
       </div>
     </div>
 
@@ -723,37 +748,44 @@
   // actual drawing's measured ratio/density against these to score how
   // well its *shape* matches the topic -- not real object recognition,
   // just a geometry-based approximation of it.
+  //
+  // IMPORTANT: なぞーる (the default mode) shows the TOPIC_EMOJI glyph as
+  // the guide, so these ratios must describe the emoji *as rendered* --
+  // not the real-world object. A banana is long, but 🍌 is drawn diagonal
+  // and its bounding box is nearly square; describing "a banana" here
+  // would punish players for tracing the guide accurately. Diagonal glyphs
+  // (🍌✏️🌭🥖🌽) therefore sit near ratio 1.0 with generous tolerances.
   var TOPIC_PROFILES = {
-    "富士山": { ratio: 1.80, ratioTol: 0.60, fill: 0.55, fillTol: 0.35 },
+    "富士山": { ratio: 1.45, ratioTol: 0.60, fill: 0.55, fillTol: 0.35 },
     "星":     { ratio: 1.00, ratioTol: 0.45, fill: 0.32, fillTol: 0.30 },
-    "木":     { ratio: 0.60, ratioTol: 0.45, fill: 0.40, fillTol: 0.35 },
-    "バナナ": { ratio: 2.00, ratioTol: 0.70, fill: 0.32, fillTol: 0.30 },
-    "家":     { ratio: 1.10, ratioTol: 0.50, fill: 0.55, fillTol: 0.35 },
-    "傘":     { ratio: 1.10, ratioTol: 0.50, fill: 0.48, fillTol: 0.35 },
-    "帽子":   { ratio: 1.60, ratioTol: 0.60, fill: 0.42, fillTol: 0.35 },
-    "ケーキ": { ratio: 1.30, ratioTol: 0.55, fill: 0.52, fillTol: 0.35 },
-    "きのこ": { ratio: 0.85, ratioTol: 0.45, fill: 0.42, fillTol: 0.35 },
-    "魚":     { ratio: 2.10, ratioTol: 0.70, fill: 0.50, fillTol: 0.35 },
+    "木":     { ratio: 0.95, ratioTol: 0.50, fill: 0.45, fillTol: 0.35 },
+    "バナナ": { ratio: 1.05, ratioTol: 0.55, fill: 0.32, fillTol: 0.30 },
+    "家":     { ratio: 1.00, ratioTol: 0.50, fill: 0.55, fillTol: 0.35 },
+    "傘":     { ratio: 0.95, ratioTol: 0.50, fill: 0.48, fillTol: 0.35 },
+    "帽子":   { ratio: 0.95, ratioTol: 0.55, fill: 0.42, fillTol: 0.35 },
+    "ケーキ": { ratio: 1.10, ratioTol: 0.55, fill: 0.52, fillTol: 0.35 },
+    "きのこ": { ratio: 0.90, ratioTol: 0.45, fill: 0.42, fillTol: 0.35 },
+    "魚":     { ratio: 1.35, ratioTol: 0.60, fill: 0.50, fillTol: 0.35 },
     "おにぎり":     { ratio: 0.95, ratioTol: 0.40, fill: 0.55, fillTol: 0.35 },
-    "ピザ":         { ratio: 1.20, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
-    "にんじん":     { ratio: 0.45, ratioTol: 0.35, fill: 0.45, fillTol: 0.35 },
-    "テント":       { ratio: 1.30, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
-    "旗":           { ratio: 0.55, ratioTol: 0.40, fill: 0.40, fillTol: 0.35 },
-    "本":           { ratio: 1.30, ratioTol: 0.45, fill: 0.60, fillTol: 0.30 },
-    "すいか":       { ratio: 1.15, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
-    "サンドイッチ": { ratio: 1.25, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
-    "ホットドッグ": { ratio: 2.30, ratioTol: 0.70, fill: 0.45, fillTol: 0.35 },
-    "バゲット":     { ratio: 2.60, ratioTol: 0.75, fill: 0.40, fillTol: 0.35 },
-    "とうもろこし": { ratio: 0.45, ratioTol: 0.35, fill: 0.50, fillTol: 0.35 },
-    "えんぴつ":     { ratio: 0.30, ratioTol: 0.30, fill: 0.40, fillTol: 0.35 },
-    "ろうそく":     { ratio: 0.40, ratioTol: 0.35, fill: 0.45, fillTol: 0.35 },
-    "サボテン":     { ratio: 0.55, ratioTol: 0.40, fill: 0.50, fillTol: 0.35 },
-    "ドア":         { ratio: 0.50, ratioTol: 0.35, fill: 0.60, fillTol: 0.30 },
-    "まど":         { ratio: 0.90, ratioTol: 0.40, fill: 0.55, fillTol: 0.30 },
-    "看板":         { ratio: 1.50, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
-    "食パン":       { ratio: 1.40, ratioTol: 0.45, fill: 0.55, fillTol: 0.35 },
-    "アイスクリーム": { ratio: 0.50, ratioTol: 0.40, fill: 0.45, fillTol: 0.35 },
-    "スマホ":       { ratio: 0.50, ratioTol: 0.35, fill: 0.60, fillTol: 0.30 }
+    "ピザ":         { ratio: 1.05, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
+    "にんじん":     { ratio: 0.85, ratioTol: 0.50, fill: 0.45, fillTol: 0.35 },
+    "テント":       { ratio: 1.25, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
+    "旗":           { ratio: 0.80, ratioTol: 0.45, fill: 0.40, fillTol: 0.35 },
+    "本":           { ratio: 1.25, ratioTol: 0.45, fill: 0.60, fillTol: 0.30 },
+    "すいか":       { ratio: 1.05, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
+    "サンドイッチ": { ratio: 1.05, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
+    "ホットドッグ": { ratio: 1.15, ratioTol: 0.55, fill: 0.45, fillTol: 0.35 },
+    "バゲット":     { ratio: 1.05, ratioTol: 0.55, fill: 0.40, fillTol: 0.35 },
+    "とうもろこし": { ratio: 0.90, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
+    "えんぴつ":     { ratio: 1.00, ratioTol: 0.55, fill: 0.35, fillTol: 0.35 },
+    "ろうそく":     { ratio: 0.55, ratioTol: 0.40, fill: 0.45, fillTol: 0.35 },
+    "サボテン":     { ratio: 0.75, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
+    "ドア":         { ratio: 0.55, ratioTol: 0.40, fill: 0.60, fillTol: 0.30 },
+    "まど":         { ratio: 0.95, ratioTol: 0.40, fill: 0.55, fillTol: 0.30 },
+    "看板":         { ratio: 0.85, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
+    "食パン":       { ratio: 1.10, ratioTol: 0.45, fill: 0.55, fillTol: 0.35 },
+    "アイスクリーム": { ratio: 0.55, ratioTol: 0.40, fill: 0.45, fillTol: 0.35 },
+    "スマホ":       { ratio: 0.55, ratioTol: 0.40, fill: 0.60, fillTol: 0.30 }
   };
 
   // Used by "なぞーる" (trace) mode as a faint guide stencil -- no external
@@ -882,6 +914,8 @@
   var $speedSlider = document.getElementById("speedSlider");
   var $widthSlider = document.getElementById("widthSlider");
   var $sensSlider = document.getElementById("sensSlider");
+  var $btnTune = document.getElementById("btnTune");
+  var $sliderPanel = document.getElementById("sliderPanel");
   var $btnPause = document.getElementById("btnPause");
   var $btnTrace = document.getElementById("btnTrace");
   var $btnRotate = document.getElementById("btnRotate");
@@ -1259,7 +1293,8 @@
     state.voiceActive = freq !== null;
 
     if (freq === null){
-      $pitchBadge.textContent = "--- Hz";
+      $pitchBadge.textContent = "🔇 こえ待ち";
+      $pitchBadge.classList.remove("voice-on");
       return;
     }
 
@@ -1280,7 +1315,8 @@
       state.smoothedPitch = state.smoothedPitch * 0.7 + med * 0.3;
     }
 
-    $pitchBadge.textContent = Math.round(state.smoothedPitch) + " Hz";
+    $pitchBadge.textContent = "🎤 " + Math.round(state.smoothedPitch) + " Hz";
+    $pitchBadge.classList.add("voice-on");
 
     // map to Y using log scale
     var lo = state.centerHz - state.rangeHz / 2;
@@ -1744,6 +1780,8 @@
     $btnRotate.textContent = "↻ 0°";
     $canvasWrap.style.transform = "";
     $playWrap.classList.remove("zoomed-pannable", "panning");
+    $sliderPanel.hidden = true;
+    $btnTune.classList.remove("active-toggle");
     $chkHideTopic.checked = false;
     updateCamera();
     showScreen("home");
@@ -1760,6 +1798,16 @@
   });
   $sensSlider.addEventListener("input", function(){
     state.rangeHz = parseInt($sensSlider.value, 10);
+  });
+
+  // The sliders are pre-round tuning, not in-round moves -- keeping them
+  // collapsed by default gives the canvas that vertical space back.
+  $btnTune.addEventListener("click", function(){
+    var show = $sliderPanel.hidden;
+    $sliderPanel.hidden = !show;
+    $btnTune.classList.toggle("active-toggle", show);
+    // the canvas area's available height changed, so re-fit it
+    handleResize();
   });
 
   // ---------------------------------------------------------
@@ -1933,11 +1981,14 @@
         var varietyScore = Math.min(variety / 6, 1);
 
         var total = shapeScore * 62 + coverageScore * 23 + varietyScore * 8;
-        var jitter = Math.random() * 8 - 3; // small, so the score stays honest
-        score = Math.round(total + 7 + jitter);
+        // Deterministic on purpose: the same drawing must always score the
+        // same. An earlier random jitter here meant re-judging the same
+        // canvas re-rolled the score, which both undermined trust in it
+        // and was trivially exploitable via 完成 -> 戻る -> 完成 loops.
+        score = Math.round(total + 8);
       }
     } catch(e){
-      score = Math.floor(Math.random() * 30) + 20;
+      score = 30; // getImageData failed; a flat consolation score
     }
     score = Math.max(0, Math.min(100, score));
     showResultScreen(score);
