@@ -208,6 +208,7 @@
     height:100%;
     padding: 8px;
     gap: 6px;
+    position: relative; /* anchors the ☰ pause-menu overlay */
   }
   .topbar{
     display:flex; align-items:center; justify-content:space-between;
@@ -451,20 +452,31 @@
     transition: transform .6s linear;
   }
 
-  /* ---------- mode toggles + collapsed tuning sliders ---------- */
-  .controls-row{
-    flex: 0 0 auto;
+  /* ---------- ☰ pause menu (rare actions + tuning sliders) ---------- */
+  .menu-panel{
+    position: absolute;
+    top: 62px;
+    right: 8px;
+    z-index: 60;
+    width: min(300px, calc(100% - 16px));
     display: flex;
-    flex-wrap: wrap;
-    gap: 10px 16px;
+    flex-direction: column;
+    gap: 8px;
     background: var(--card);
-    border: 2px solid var(--ink);
+    border: 2.5px solid var(--ink);
     border-radius: 14px;
-    padding: 8px 12px;
-    box-shadow: 3px 3px 0 var(--shadow);
+    padding: 12px;
+    box-shadow: 5px 5px 0 var(--shadow);
   }
-  .controls-row .ctrl{
-    flex: 1 1 140px;
+  .menu-panel[hidden]{ display: none; }
+  .menu-note{
+    font-size: .7rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    text-align: center;
+  }
+  .menu-panel .icon-btn{ text-align: center; padding: 10px; }
+  .ctrl{
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -472,24 +484,27 @@
     font-weight: 700;
     color: var(--ink-soft);
   }
-  .controls-row input[type=range]{ width: 100%; accent-color: var(--crayon-red); }
-  .ctrl-toggles{
-    flex: 1 1 100%;
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .ctrl-toggles .icon-btn{ flex: 1 1 auto; text-align: center; }
-  .ctrl-toggles .icon-btn.active-toggle{ background: var(--crayon-yellow); }
+  .ctrl input[type=range]{ width: 100%; accent-color: var(--crayon-red); }
   .slider-panel{
-    flex: 1 1 100%;
     display: flex;
-    flex-wrap: wrap;
-    gap: 10px 16px;
-    padding-top: 6px;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 2px;
     border-top: 2px dashed var(--line);
+    border-bottom: 2px dashed var(--line);
   }
-  .slider-panel[hidden]{ display: none; }
+  .icon-btn.active-toggle{ background: var(--crayon-yellow); }
+
+  /* zoom lives ON the canvas it zooms (proximity), bottom-left so it
+     doesn't collide with the mic badge top-right */
+  .zoom-overlay{
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    z-index: 5;
+    font-size: .72rem;
+    padding: 6px 9px;
+  }
 
   /* The two most-pressed buttons during an active round (undo and rotate),
      placed right next to the main draw button for quick thumb access. */
@@ -501,11 +516,17 @@
   .quick-btn{
     flex: 1 1 auto;
     min-height: 50px;
-    font-size: .85rem;
+    font-size: .9rem;
     font-weight: 800;
     line-height: 1.3;
     text-align: center;
   }
+  /* Undo and rotate used to be twin white stickers with mirror-image
+     arrows (↺/↻) -- indistinguishable at a glance. Adjacent controls need
+     to differ in at least two of shape/color/label, so: undo stays a plain
+     white sticker, rotate is a yellow one, and both spell out their action. */
+  .undo-btn{ background: var(--card); }
+  .rotate-btn{ background: var(--crayon-yellow); }
 
   /* ---------- result screen: graded homework ---------- */
   #result{
@@ -693,28 +714,40 @@
         <li><span>声の<b>高さ</b>でペンが<b>上下</b>する（高い声＝上、低い声＝下）</span></li>
         <li><span>ペンは自動で右へ進み続ける。右下のボタンを<b>長押し</b>しながら<b>声を出している間</b>だけ
         色が塗られる（無音の間はボタンを押していてもペンが浮く）</span></li>
-        <li><span>「↻ 回転」を押すと<b>キャンバスだけ</b>が90度回転する！</span></li>
-        <li><span>描けたら「完成」を押すと、審査員パンダが判定してくれる</span></li>
+        <li><span>「⟳ 回転」を押すと<b>キャンバスだけ</b>が90度回転する！</span></li>
+        <li><span>描けたら「完成」を<b>長押し</b>すると、審査員パンダが判定してくれる</span></li>
       </ol>
       <details class="howto-more">
         <summary>もっと詳しく</summary>
         <div class="howto-more-body">
           ・線は声が続いている間だけ伸びる。<b>息が切れたら無理せず一度切ってOK</b>。ペンが一周して
           戻ってきたときに続きを描き足せば、つなぎ目は意外と目立たない。<br>
-          ・「⏸ 一時停止」でペンの動きを完全に止められる。<br>
-          ・マウスホイール（スマホは「🔍 ズーム」ボタン）で拡大すると、実際のペンの速さそのままで
-          画面上ではゆっくり大きく動くので、細かい部分も狙いやすい。ズーム中はドラッグ（指でも）で
-          キャンバスの好きな場所に視点を動かせる。<br>
+          ・「☰ メニュー」を開くとペンは自動で一時停止。閉じると再開する。ぜんぶ消す・なぞーるON/OFF・
+          ペンの速さなどの調整はメニューの中にある。<br>
+          ・キャンバス左下の「🔍」ボタン（PCはマウスホイールでも）で拡大すると、実際のペンの速さ
+          そのままで画面上ではゆっくり大きく動くので、細かい部分も狙いやすい。ズーム中はドラッグ
+          （指でも）でキャンバスの好きな場所に視点を動かせる。<br>
           ・キャンバス左右の半透明エリアは塗れないが、ここでも声の高さは反映されるので、
           スタート前から音程を合わせておける。<br>
-          ・「↻ 回転」は0°→90°→180°→270°を繰り返す。保存・シェアする画像も、画面で実際に
+          ・「⟳ 回転」は0°→90°→180°→270°を繰り返す。保存・シェアする画像も、画面で実際に
           見えていた向きに合わせて出力される。
         </div>
       </details>
     </div>
   </div>
 
-  <!-- GAME SCREEN -->
+  <!-- GAME SCREEN.
+       Button layout follows frequency tiers (Fitts's law):
+       - constant/frequent (描く, 完成, 回転, 一つ戻す, palette) live big in
+         the bottom thumb zone or beside the canvas;
+       - contextual actions sit next to what they affect (お題チェンジ by
+         the topic box, ズーム overlaid on the canvas it zooms);
+       - everything rare (clear, trace toggle, sliders, home) hides behind
+         one ☰ menu that auto-pauses the game while open (the classic
+         pause-menu convention), which is also why there is no separate
+         pause button anymore.
+       Save/share exist only on the result screen -- they're post-game
+       actions and had no business on the play screen. -->
   <div id="game" class="screen">
     <div class="topbar">
       <div class="topic-box">
@@ -722,12 +755,28 @@
         <div class="value" id="pictureTopic">-</div>
       </div>
       <div class="icon-btn-row">
-        <button class="icon-btn" id="btnClear">クリア</button>
-        <button class="icon-btn" id="btnSave">保存(PNG)</button>
-        <button class="icon-btn" id="btnShare">シェア</button>
-        <button class="icon-btn" id="btnReroll">お題チェンジ</button>
-        <button class="icon-btn" id="btnHome">ホームに戻る</button>
+        <button class="icon-btn" id="btnReroll">🎲 お題チェンジ</button>
+        <button class="icon-btn" id="btnMenu">☰ メニュー</button>
       </div>
+    </div>
+
+    <!-- pause menu: opening this pauses the pen, closing resumes it -->
+    <div class="menu-panel" id="menuPanel" hidden>
+      <div class="menu-note">⏸ メニューを開いている間はペンも一時停止中</div>
+      <button class="icon-btn" id="btnTrace">📝 なぞーる: ON</button>
+      <button class="icon-btn" id="btnClear">🗑 ぜんぶ消す</button>
+      <div class="slider-panel" id="sliderPanel">
+        <label class="ctrl">ペンの速さ
+          <input type="range" id="speedSlider" min="80" max="600" step="20" value="260">
+        </label>
+        <label class="ctrl">ペンの太さ
+          <input type="range" id="widthSlider" min="2" max="30" step="1" value="6">
+        </label>
+        <label class="ctrl">声の感度（音域幅）
+          <input type="range" id="sensSlider" min="60" max="500" step="10" value="150">
+        </label>
+      </div>
+      <button class="icon-btn" id="btnHome">🏠 ホームに戻る</button>
     </div>
 
     <div class="main-area">
@@ -743,39 +792,15 @@
           </div>
           <canvas id="cursorCanvas"></canvas>
           <div class="pitch-indicator" id="pitchBadge">🔇 こえ待ち</div>
+          <button class="icon-btn zoom-overlay" id="btnZoom">🔍 1.0x</button>
         </div>
       </div>
       <div class="palette" id="palette"></div>
     </div>
 
-    <div class="controls-row">
-      <div class="ctrl-toggles">
-        <button class="icon-btn" id="btnPause">⏸ 一時停止</button>
-        <button class="icon-btn" id="btnZoom">🔍 1.0x</button>
-        <button class="icon-btn" id="btnTrace">📝 なぞーる: ON</button>
-        <button class="icon-btn" id="btnTune">⚙ 調整</button>
-      </div>
-      <!-- The three sliders are pre-round tuning, not in-round moves --
-           collapsed by default so the canvas gets the vertical space. -->
-      <div class="slider-panel" id="sliderPanel" hidden>
-        <label class="ctrl">ペンの速さ
-          <input type="range" id="speedSlider" min="80" max="600" step="20" value="260">
-        </label>
-        <label class="ctrl">ペンの太さ
-          <input type="range" id="widthSlider" min="2" max="30" step="1" value="6">
-        </label>
-        <label class="ctrl">声の感度（音域幅）
-          <input type="range" id="sensSlider" min="60" max="500" step="10" value="150">
-        </label>
-      </div>
-    </div>
-
-    <!-- Actual usage showed 描く / 回転 / 元に戻る get pressed far more than
-         anything else while playing, so they live together right by the
-         thumb instead of being scattered into the utility rows above. -->
     <div class="quick-row">
-      <button class="icon-btn quick-btn" id="btnUndo">↺<br>一つ戻す</button>
-      <button class="icon-btn quick-btn" id="btnRotate">↻<br>0°</button>
+      <button class="icon-btn quick-btn undo-btn" id="btnUndo">↩ 一つ戻す</button>
+      <button class="icon-btn quick-btn rotate-btn" id="btnRotate">⟳ 回転 0°</button>
     </div>
 
     <div class="bottombar">
@@ -973,9 +998,8 @@
   var $speedSlider = document.getElementById("speedSlider");
   var $widthSlider = document.getElementById("widthSlider");
   var $sensSlider = document.getElementById("sensSlider");
-  var $btnTune = document.getElementById("btnTune");
-  var $sliderPanel = document.getElementById("sliderPanel");
-  var $btnPause = document.getElementById("btnPause");
+  var $btnMenu = document.getElementById("btnMenu");
+  var $menuPanel = document.getElementById("menuPanel");
   var $btnTrace = document.getElementById("btnTrace");
   var $btnRotate = document.getElementById("btnRotate");
   var $btnZoom = document.getElementById("btnZoom");
@@ -983,8 +1007,6 @@
   var $btnUndo = document.getElementById("btnUndo");
   var $btnClear = document.getElementById("btnClear");
   var $btnFinish = document.getElementById("btnFinish");
-  var $btnSave = document.getElementById("btnSave");
-  var $btnShare = document.getElementById("btnShare");
   var $btnReroll = document.getElementById("btnReroll");
   var $btnHome = document.getElementById("btnHome");
 
@@ -1750,7 +1772,6 @@
     document.body.removeChild(link);
   }
 
-  $btnSave.addEventListener("click", downloadPng);
   $btnResultSave.addEventListener("click", downloadPng);
 
   // Shares the finished drawing together with an invite back to the game
@@ -1813,7 +1834,6 @@
     }, "image/png");
   }
 
-  $btnShare.addEventListener("click", shareDrawing);
   $btnResultShare.addEventListener("click", shareDrawing);
 
   $btnReroll.addEventListener("click", function(){
@@ -1840,14 +1860,12 @@
     }
     $mainBtn.textContent = "スタート";
     $mainBtn.classList.remove("drawing-mode", "active-press");
-    $btnPause.textContent = "⏸ 一時停止";
     $btnZoom.textContent = "🔍 1.0x";
     $btnTrace.textContent = "📝 なぞーる: ON";
-    $btnRotate.textContent = "↻ 0°";
+    $btnRotate.textContent = "⟳ 回転 0°";
     $canvasWrap.style.transform = "";
     $playWrap.classList.remove("zoomed-pannable", "panning");
-    $sliderPanel.hidden = true;
-    $btnTune.classList.remove("active-toggle");
+    closeMenu();
     $chkHideTopic.checked = false;
     updateCamera();
     showScreen("home");
@@ -1866,26 +1884,28 @@
     state.rangeHz = parseInt($sensSlider.value, 10);
   });
 
-  // The sliders are pre-round tuning, not in-round moves -- keeping them
-  // collapsed by default gives the canvas that vertical space back.
-  $btnTune.addEventListener("click", function(){
-    var show = $sliderPanel.hidden;
-    $sliderPanel.hidden = !show;
-    $btnTune.classList.toggle("active-toggle", show);
-    // the canvas area's available height changed, so re-fit it
-    handleResize();
-  });
+  // ---------------------------------------------------------
+  // ☰ PAUSE MENU
+  // Opening the menu freezes the pen (the classic game pause-menu
+  // convention), so there is no separate pause button -- the menu IS the
+  // pause. Closing it resumes play right where it stopped.
+  // ---------------------------------------------------------
+  function openMenu(){
+    $menuPanel.hidden = false;
+    $btnMenu.classList.add("active-toggle");
+    state.paused = true;
+    state.isDrawing = false;
+    $mainBtn.classList.remove("active-press");
+  }
 
-  // ---------------------------------------------------------
-  // PAUSE (freezes the pen completely -- horizontal AND vertical/pitch)
-  // ---------------------------------------------------------
-  $btnPause.addEventListener("click", function(){
-    state.paused = !state.paused;
-    $btnPause.textContent = state.paused ? "▶ 再開" : "⏸ 一時停止";
-    if (state.paused){
-      state.isDrawing = false;
-      $mainBtn.classList.remove("active-press");
-    }
+  function closeMenu(){
+    $menuPanel.hidden = true;
+    $btnMenu.classList.remove("active-toggle");
+    state.paused = false;
+  }
+
+  $btnMenu.addEventListener("click", function(){
+    if ($menuPanel.hidden){ openMenu(); } else { closeMenu(); }
   });
 
   // ---------------------------------------------------------
@@ -1929,6 +1949,9 @@
   var panDrag = null;
   $playWrap.addEventListener("pointerdown", function(e){
     if (state.zoom <= 1.01) return;
+    // the zoom button now lives inside the play area (proximity to what
+    // it affects) -- taps on it must not start a pan drag
+    if (e.target.closest && e.target.closest("#btnZoom")) return;
     panDrag = {
       pointerId: e.pointerId,
       startClientX: e.clientX,
@@ -1972,7 +1995,7 @@
   // ---------------------------------------------------------
   $btnRotate.addEventListener("click", function(){
     state.rotation = (state.rotation + 90) % 360;
-    $btnRotate.textContent = "↻ " + state.rotation + "°";
+    $btnRotate.textContent = "⟳ 回転 " + state.rotation + "°";
     $canvasWrap.style.transform = state.rotation ? "rotate(" + state.rotation + "deg)" : "";
     drawGuide();
   });
@@ -2342,8 +2365,9 @@
     state.sessionScores = [];
     updateTopicLabel();
     $btnZoom.textContent = "🔍 1.0x";
-    $btnRotate.textContent = "↻ 0°";
+    $btnRotate.textContent = "⟳ 回転 0°";
     $playWrap.classList.remove("zoomed-pannable", "panning");
+    closeMenu();
     requestAnimationFrame(function(){
       resizeCanvas();
       clearCanvas();
@@ -2377,10 +2401,10 @@
     updateTopicLabel();
     $mainBtn.textContent = "スタート";
     $mainBtn.classList.remove("drawing-mode", "active-press");
-    $btnPause.textContent = "⏸ 一時停止";
     $btnZoom.textContent = "🔍 1.0x";
-    $btnRotate.textContent = "↻ 0°";
+    $btnRotate.textContent = "⟳ 回転 0°";
     $playWrap.classList.remove("zoomed-pannable", "panning");
+    closeMenu();
     showScreen("game");
     requestAnimationFrame(function(){
       resizeCanvas();
