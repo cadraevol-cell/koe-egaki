@@ -376,8 +376,27 @@
     background: linear-gradient(180deg, var(--good), #22a563);
     cursor: pointer;
     box-shadow: 0 6px 18px rgba(74,222,128,.4);
+    touch-action: none;
+    position: relative;
+    overflow: hidden;
   }
-  #btnFinish:active{ transform: scale(.96); filter: brightness(1.08); }
+  #btnFinish small{ display: block; font-size: .6rem; font-weight: 700; opacity: .75; }
+  /* Hold-to-confirm fill: sits next to the most-mashed button in the game
+     (描く), so a plain tap must not fire it -- the white sweep telegraphs
+     the hold requirement and its progress. Duration mirrors FINISH_HOLD_MS. */
+  #btnFinish::after{
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,.45);
+    transform: scaleX(0);
+    transform-origin: left;
+    pointer-events: none;
+  }
+  #btnFinish.holding::after{
+    transform: scaleX(1);
+    transition: transform .6s linear;
+  }
 
   /* ---------- always-visible controls (speed / thickness / sensitivity) ---------- */
   .controls-row{
@@ -499,6 +518,13 @@
   @supports (background-clip: text) or (-webkit-background-clip: text){
     .result-title, .judge-percent{ color: transparent; }
   }
+  .session-line{
+    font-size: .85rem;
+    font-weight: 700;
+    color: #ffd76a;
+    margin-bottom: 4px;
+    min-height: 1.2em;
+  }
   .best-score{ font-size: .78rem; color: var(--good); font-weight: 700; margin-bottom: 10px; min-height: 1.2em; }
   .judge-persona{ font-size:.8rem; color:var(--sub); margin-bottom:6px; }
   .judge-comment{
@@ -603,6 +629,8 @@
       <details class="howto-more">
         <summary>もっと詳しく</summary>
         <div class="howto-more-body">
+          ・線は声が続いている間だけ伸びる。<b>息が切れたら無理せず一度切ってOK</b>。ペンが一周して
+          戻ってきたときに続きを描き足せば、つなぎ目は意外と目立たない。<br>
           ・「⏸ 一時停止」でペンの動きを完全に止められる。<br>
           ・マウスホイール（スマホは「🔍 ズーム」ボタン）で拡大すると、実際のペンの速さそのままで
           画面上ではゆっくり大きく動くので、細かい部分も狙いやすい。ズーム中はドラッグ（指でも）で
@@ -620,7 +648,7 @@
   <div id="game" class="screen">
     <div class="topbar">
       <div class="topic-box">
-        <div class="label">お題</div>
+        <div class="label" id="topicLabel">お題</div>
         <div class="value" id="pictureTopic">-</div>
       </div>
       <div class="icon-btn-row">
@@ -682,7 +710,7 @@
 
     <div class="bottombar">
       <button id="mainBtn">スタート</button>
-      <button id="btnFinish">🏁<br>完成</button>
+      <button id="btnFinish">🏁<br>完成<small>長押し</small></button>
     </div>
 
   </div>
@@ -695,10 +723,11 @@
         <div class="judge-label">お題</div>
         <div class="judge-topic" id="judgeTopicLabel">-</div>
         <div class="judge-percent" id="judgePercent">0%</div>
+        <div class="session-line" id="sessionLine"></div>
         <div class="best-score" id="bestScoreLine"></div>
         <div class="judge-persona">🐼 審査員パンダのコメント</div>
         <div class="judge-comment" id="judgeComment"></div>
-        <div class="judge-caption">※お題ごとの典型的な形（縦横比・塗りの密度）との近さで採点する簡易判定です（本格的な画像認識AIではありません）</div>
+        <div class="judge-caption">※お手本（下絵の絵文字）と形がどれだけ重なるかで採点しています。丁寧になぞるほど高得点！</div>
         <label class="hide-topic-toggle">
           <input type="checkbox" id="chkHideTopic">
           お題を隠して保存・シェア（見た人に当ててもらおう）
@@ -742,55 +771,11 @@
     "ドア","まど","看板","食パン","アイスクリーム","スマホ"
   ];
 
-  // Each topic's typical silhouette, expressed as an expected bounding-box
-  // aspect ratio (width/height) and expected ink density within that box
-  // (0 = sparse/outline-like, 1 = solid blob). The judge compares the
-  // actual drawing's measured ratio/density against these to score how
-  // well its *shape* matches the topic -- not real object recognition,
-  // just a geometry-based approximation of it.
-  //
-  // IMPORTANT: なぞーる (the default mode) shows the TOPIC_EMOJI glyph as
-  // the guide, so these ratios must describe the emoji *as rendered* --
-  // not the real-world object. A banana is long, but 🍌 is drawn diagonal
-  // and its bounding box is nearly square; describing "a banana" here
-  // would punish players for tracing the guide accurately. Diagonal glyphs
-  // (🍌✏️🌭🥖🌽) therefore sit near ratio 1.0 with generous tolerances.
-  var TOPIC_PROFILES = {
-    "富士山": { ratio: 1.45, ratioTol: 0.60, fill: 0.55, fillTol: 0.35 },
-    "星":     { ratio: 1.00, ratioTol: 0.45, fill: 0.32, fillTol: 0.30 },
-    "木":     { ratio: 0.95, ratioTol: 0.50, fill: 0.45, fillTol: 0.35 },
-    "バナナ": { ratio: 1.05, ratioTol: 0.55, fill: 0.32, fillTol: 0.30 },
-    "家":     { ratio: 1.00, ratioTol: 0.50, fill: 0.55, fillTol: 0.35 },
-    "傘":     { ratio: 0.95, ratioTol: 0.50, fill: 0.48, fillTol: 0.35 },
-    "帽子":   { ratio: 0.95, ratioTol: 0.55, fill: 0.42, fillTol: 0.35 },
-    "ケーキ": { ratio: 1.10, ratioTol: 0.55, fill: 0.52, fillTol: 0.35 },
-    "きのこ": { ratio: 0.90, ratioTol: 0.45, fill: 0.42, fillTol: 0.35 },
-    "魚":     { ratio: 1.35, ratioTol: 0.60, fill: 0.50, fillTol: 0.35 },
-    "おにぎり":     { ratio: 0.95, ratioTol: 0.40, fill: 0.55, fillTol: 0.35 },
-    "ピザ":         { ratio: 1.05, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
-    "にんじん":     { ratio: 0.85, ratioTol: 0.50, fill: 0.45, fillTol: 0.35 },
-    "テント":       { ratio: 1.25, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
-    "旗":           { ratio: 0.80, ratioTol: 0.45, fill: 0.40, fillTol: 0.35 },
-    "本":           { ratio: 1.25, ratioTol: 0.45, fill: 0.60, fillTol: 0.30 },
-    "すいか":       { ratio: 1.05, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
-    "サンドイッチ": { ratio: 1.05, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
-    "ホットドッグ": { ratio: 1.15, ratioTol: 0.55, fill: 0.45, fillTol: 0.35 },
-    "バゲット":     { ratio: 1.05, ratioTol: 0.55, fill: 0.40, fillTol: 0.35 },
-    "とうもろこし": { ratio: 0.90, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
-    "えんぴつ":     { ratio: 1.00, ratioTol: 0.55, fill: 0.35, fillTol: 0.35 },
-    "ろうそく":     { ratio: 0.55, ratioTol: 0.40, fill: 0.45, fillTol: 0.35 },
-    "サボテン":     { ratio: 0.75, ratioTol: 0.45, fill: 0.50, fillTol: 0.35 },
-    "ドア":         { ratio: 0.55, ratioTol: 0.40, fill: 0.60, fillTol: 0.30 },
-    "まど":         { ratio: 0.95, ratioTol: 0.40, fill: 0.55, fillTol: 0.30 },
-    "看板":         { ratio: 0.85, ratioTol: 0.50, fill: 0.50, fillTol: 0.35 },
-    "食パン":       { ratio: 1.10, ratioTol: 0.45, fill: 0.55, fillTol: 0.35 },
-    "アイスクリーム": { ratio: 0.55, ratioTol: 0.40, fill: 0.45, fillTol: 0.35 },
-    "スマホ":       { ratio: 0.55, ratioTol: 0.40, fill: 0.60, fillTol: 0.30 }
-  };
-
-  // Used by "なぞーる" (trace) mode as a faint guide stencil -- no external
-  // image assets, just a big emoji glyph rendered with a grayscale+low-alpha
-  // canvas filter.
+  // Serves double duty: なぞーる renders this glyph as the faint on-screen
+  // trace guide, and the judge rasterizes the SAME glyph as its answer key
+  // (see buildTargetMaskData). No external image assets -- and because
+  // both uses share one glyph, whatever this platform's emoji font draws
+  // is exactly what the player is scored against.
   var TOPIC_EMOJI = {
     "富士山": "🗻", "家": "🏠", "ケーキ": "🎂", "帽子": "🎩", "傘": "☂️",
     "木": "🌳", "バナナ": "🍌", "魚": "🐟", "星": "⭐", "きのこ": "🍄",
@@ -880,7 +865,11 @@
     playCssW: 0,
     sideZoneW: 0,
     showTopicOnSave: true,
-    undoStack: []
+    undoStack: [],
+    // 3-round session: play three topics back to back, totals become a
+    // rank title. Gives a reason to keep going beyond one-off doodles.
+    sessionRound: 0,      // 0..2
+    sessionScores: []     // score per finished round (re-judging overwrites)
   };
 
   var UNDO_LIMIT = 12;
@@ -940,6 +929,8 @@
   var $resultPreviewImg = document.getElementById("resultPreviewImg");
   var $chkHideTopic = document.getElementById("chkHideTopic");
   var $bestScoreLine = document.getElementById("bestScoreLine");
+  var $sessionLine = document.getElementById("sessionLine");
+  var $topicLabel = document.getElementById("topicLabel");
 
   var $customColorInput = null;
 
@@ -1768,6 +1759,8 @@
     state.rotation = 0;
     state.traceMode = true;
     state.showTopicOnSave = true;
+    state.sessionRound = 0;
+    state.sessionScores = [];
     if (state.animId !== null){
       cancelAnimationFrame(state.animId);
       state.animId = null;
@@ -1921,71 +1914,153 @@
     return pick(JUDGE_COMMENTS[JUDGE_COMMENTS.length - 1].lines);
   }
 
-  // Scores the actual ink on the canvas against the expected silhouette
-  // (aspect ratio + fill density) for the current topic. This is a
-  // geometry-based approximation, not real object recognition -- it can't
-  // know if the drawing actually "looks like" a cat, only whether its
-  // proportions and density resemble what a cat-shaped doodle tends to have.
+  // Renders the current topic's emoji into an offscreen canvas exactly the
+  // way drawGuide() renders the on-screen guide (same relative font size,
+  // same centering) and returns its pixel data. This is the judge's answer
+  // key: because it's rasterized by the SAME emoji font that drew the
+  // guide on this device, the guide and the judge can never disagree --
+  // whatever this platform's 🍌 looks like, that exact shape is both what
+  // the player traced and what they're scored against.
+  function buildTargetMaskData(w, h){
+    var emoji = TOPIC_EMOJI[state.currentPicture];
+    if (!emoji) return null;
+    var c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    var mctx = c.getContext("2d");
+    mctx.textAlign = "center";
+    mctx.textBaseline = "middle";
+    mctx.font = Math.floor(h * 0.62) + "px sans-serif";
+    mctx.fillText(emoji, w / 2, h / 2);
+    return mctx.getImageData(0, 0, w, h).data;
+  }
+
+  // Downsamples RGBA pixel data into a boolean grid. isInk distinguishes
+  // the two kinds of mask: drawn ink (opaque and not near-white) vs the
+  // target emoji render (any visible alpha).
+  function extractGrid(data, w, h, step, isInk){
+    var gw = Math.floor(w / step), gh = Math.floor(h / step);
+    var grid = new Uint8Array(gw * gh);
+    var count = 0;
+    var minX = gw, maxX = -1, minY = gh, maxY = -1;
+    for (var gy = 0; gy < gh; gy++){
+      for (var gx = 0; gx < gw; gx++){
+        var i = ((gy * step) * w + (gx * step)) * 4;
+        var on;
+        if (isInk){
+          on = data[i + 3] > 20 && !(data[i] > 245 && data[i + 1] > 245 && data[i + 2] > 245);
+        } else {
+          on = data[i + 3] > 40;
+        }
+        if (on){
+          grid[gy * gw + gx] = 1;
+          count++;
+          if (gx < minX) minX = gx;
+          if (gx > maxX) maxX = gx;
+          if (gy < minY) minY = gy;
+          if (gy > maxY) maxY = gy;
+        }
+      }
+    }
+    return { grid: grid, gw: gw, gh: gh, count: count,
+             x0: minX, x1: maxX, y0: minY, y1: maxY };
+  }
+
+  // Resamples a mask's bounding-box contents onto an N x N grid, so two
+  // shapes can be compared position- and scale-independently: a small
+  // banana in a corner and a huge one dead-center normalize to the same
+  // thing. (Aspect ratio is deliberately erased here too -- it's scored
+  // separately below, so it can be weighted instead of all-or-nothing.)
+  var NORM_N = 40;
+  function normalizeMask(m){
+    var out = new Uint8Array(NORM_N * NORM_N);
+    var bw = m.x1 - m.x0 + 1, bh = m.y1 - m.y0 + 1;
+    for (var j = 0; j < NORM_N; j++){
+      for (var i = 0; i < NORM_N; i++){
+        var sx = m.x0 + Math.floor((i + 0.5) / NORM_N * bw);
+        var sy = m.y0 + Math.floor((j + 0.5) / NORM_N * bh);
+        out[j * NORM_N + i] = m.grid[sy * m.gw + sx];
+      }
+    }
+    return out;
+  }
+
+  function dilateNorm(mask){
+    var out = new Uint8Array(NORM_N * NORM_N);
+    for (var j = 0; j < NORM_N; j++){
+      for (var i = 0; i < NORM_N; i++){
+        var on = 0;
+        for (var dj = -1; dj <= 1 && !on; dj++){
+          for (var di = -1; di <= 1 && !on; di++){
+            var y = j + dj, x = i + di;
+            if (y >= 0 && y < NORM_N && x >= 0 && x < NORM_N && mask[y * NORM_N + x]) on = 1;
+          }
+        }
+        out[j * NORM_N + i] = on;
+      }
+    }
+    return out;
+  }
+
+  // Scores the drawing by actually overlapping it with the guide emoji's
+  // silhouette (both normalized to their bounding boxes):
+  //   - recall:    how much of the target shape the ink covers
+  //   - precision: how much of the ink stays inside the (slightly dilated)
+  //                target shape
+  //   - aspect:    how close the ink's width/height ratio is to the target's
+  // Careful tracing genuinely scores higher than filling the same region
+  // with scribble, and sloppy overshoot genuinely costs points -- unlike
+  // the old bbox-ratio heuristic, skill actually moves the number.
+  // Deterministic on purpose: the same drawing always scores the same.
   function judgeDrawing(){
     var w = $canvas.width, h = $canvas.height;
     var score;
     try {
-      var data = ctx.getImageData(0, 0, w, h).data;
-      var stride = 16; // sample every 4th pixel (4 bytes * 4)
-      var sampleCount = 0, painted = 0;
+      var step = Math.max(1, Math.floor(w / 160));
+      var inkData = ctx.getImageData(0, 0, w, h).data;
+      var ink = extractGrid(inkData, w, h, step, true);
+
+      // color variety for the small flavor bonus
       var buckets = {};
-      var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (var i = 0; i < data.length; i += stride){
-        sampleCount++;
-        var r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
-        // drawCanvas is transparent where nothing has been painted (see
-        // resizeCanvas), so both "near-white" and "mostly transparent"
-        // count as blank/unpainted here.
-        if (a > 20 && !(r > 245 && g > 245 && b > 245)){
-          painted++;
-          var key = (r >> 5) + "_" + (g >> 5) + "_" + (b >> 5);
-          buckets[key] = true;
-          var pixelIndex = i / 4;
-          var px = pixelIndex % w;
-          var py = Math.floor(pixelIndex / w);
-          if (px < minX) minX = px;
-          if (px > maxX) maxX = px;
-          if (py < minY) minY = py;
-          if (py > maxY) maxY = py;
+      for (var i = 0; i < inkData.length; i += step * 16){
+        if (inkData[i + 3] > 20 && !(inkData[i] > 245 && inkData[i + 1] > 245 && inkData[i + 2] > 245)){
+          buckets[(inkData[i] >> 5) + "_" + (inkData[i + 1] >> 5) + "_" + (inkData[i + 2] >> 5)] = true;
         }
       }
-      var coverage = sampleCount > 0 ? painted / sampleCount : 0;
-      var variety = Object.keys(buckets).length;
+      var varietyScore = Math.min(Object.keys(buckets).length / 5, 1);
 
-      if (coverage < 0.008 || !isFinite(minX)){
-        score = Math.round(coverage * 300); // essentially blank canvas
+      var targetData = buildTargetMaskData(w, h);
+      var target = targetData ? extractGrid(targetData, w, h, step, false) : null;
+      if (ink.count < 12){
+        score = ink.count; // essentially blank canvas
+      } else if (!target || target.count < 12){
+        score = 30; // emoji missing or rendered as nothing (shouldn't happen)
       } else {
-        var bboxW = Math.max(1, maxX - minX + 1);
-        var bboxH = Math.max(1, maxY - minY + 1);
-        var ratio = bboxW / bboxH;
+        var inkN = normalizeMask(ink);
+        var targetN = normalizeMask(target);
+        var targetDil = dilateNorm(targetN);
 
-        // fill density within the bounding box, estimated from sampled pixels
-        // that fall inside it relative to the box's share of the canvas
-        var bboxAreaFraction = (bboxW * bboxH) / (w * h);
-        var fillDensity = bboxAreaFraction > 0 ? Math.min(1, coverage / bboxAreaFraction) : 0;
+        var targetCells = 0, inkCells = 0, hit = 0, inside = 0;
+        for (var k = 0; k < NORM_N * NORM_N; k++){
+          if (targetN[k]) targetCells++;
+          if (inkN[k]) inkCells++;
+          if (targetN[k] && inkN[k]) hit++;
+          if (inkN[k] && targetDil[k]) inside++;
+        }
+        var recall = targetCells > 0 ? hit / targetCells : 0;
+        var precision = inkCells > 0 ? inside / inkCells : 0;
 
-        var profile = TOPIC_PROFILES[state.currentPicture] || { ratio: 1, ratioTol: 0.6, fill: 0.5, fillTol: 0.4 };
+        var inkRatio = (ink.x1 - ink.x0 + 1) / Math.max(1, ink.y1 - ink.y0 + 1);
+        var targetRatio = (target.x1 - target.x0 + 1) / Math.max(1, target.y1 - target.y0 + 1);
+        var aspectScore = Math.max(0, 1 - Math.abs(Math.log(inkRatio / targetRatio)) / 0.8);
 
-        var ratioDiff = Math.abs(Math.log(ratio) - Math.log(profile.ratio));
-        var ratioScore = Math.max(0, 1 - ratioDiff / profile.ratioTol);
-        var fillDiff = Math.abs(fillDensity - profile.fill);
-        var fillScore = Math.max(0, 1 - fillDiff / profile.fillTol);
-        var shapeScore = ratioScore * 0.7 + fillScore * 0.3;
+        // full marks well below 100% overlap -- this is a voice-controlled
+        // pen, after all; the ceiling should be reachable by a human
+        var recallScore = Math.min(recall / 0.55, 1);
+        var precisionScore = Math.min(precision / 0.7, 1);
 
-        var coverageScore = Math.min(coverage / 0.12, 1);
-        var varietyScore = Math.min(variety / 6, 1);
-
-        var total = shapeScore * 62 + coverageScore * 23 + varietyScore * 8;
-        // Deterministic on purpose: the same drawing must always score the
-        // same. An earlier random jitter here meant re-judging the same
-        // canvas re-rolled the score, which both undermined trust in it
-        // and was trivially exploitable via 完成 -> 戻る -> 完成 loops.
-        score = Math.round(total + 8);
+        var likeness = recallScore * 0.5 + precisionScore * 0.3 + aspectScore * 0.2;
+        score = Math.round(likeness * 90 + varietyScore * 10);
       }
     } catch(e){
       score = 30; // getImageData failed; a flat consolation score
@@ -2073,6 +2148,19 @@
     }
   }
 
+  // Rank titles for a finished 3-round session, by total (out of 300).
+  function sessionTitle(total){
+    if (total >= 240) return "🏆 こえ描きの神";
+    if (total >= 180) return "🥇 こえ描き職人";
+    if (total >= 120) return "🥈 なかなかの喉";
+    if (total >= 60)  return "🥉 みこみあり";
+    return "🎨 前衛芸術家";
+  }
+
+  function updateTopicLabel(){
+    $topicLabel.textContent = "お題（ラウンド " + (state.sessionRound + 1) + "/3）";
+  }
+
   function showResultScreen(score){
     state.isDrawing = false;
     if (state.animId !== null){
@@ -2085,6 +2173,19 @@
     $chkHideTopic.checked = !state.showTopicOnSave;
     updateResultPreview();
 
+    // Session bookkeeping: overwriting (not pushing) means 完成 -> 戻る ->
+    // 完成 re-judges the same round instead of double-counting it.
+    state.sessionScores[state.sessionRound] = score;
+    var total = state.sessionScores.reduce(function(a, b){ return a + (b || 0); }, 0);
+    var isFinalRound = state.sessionRound === 2;
+    if (isFinalRound){
+      $sessionLine.textContent = "🏁 3連戦おわり！ 合計 " + total + "点 → 称号「" + sessionTitle(total) + "」";
+      $btnResultNext.textContent = "🆕 新しい3連戦へ";
+    } else {
+      $sessionLine.textContent = "ラウンド " + (state.sessionRound + 1) + "/3　ここまで合計 " + total + "点";
+      $btnResultNext.textContent = "🔄 次のお題へ（" + (state.sessionRound + 2) + "/3）";
+    }
+
     var best = getBestScore();
     var isNewBest = best === null || score > best;
     if (isNewBest) saveBestScore(score);
@@ -2095,7 +2196,7 @@
     showScreen("result");
     animateScoreCountUp(score);
     playResultChime(score);
-    if (score >= 70) launchConfetti();
+    if (score >= 70 || (isFinalRound && total >= 180)) launchConfetti();
   }
 
   // Lets people share a "guess what this is" doodle without giving the
@@ -2106,7 +2207,42 @@
     updateResultPreview();
   });
 
-  $btnFinish.addEventListener("click", judgeDrawing);
+  // 完成 is hold-to-confirm: it sits right next to 描く (the single most
+  // mashed button in the game), and a stray tap yanking you out of a round
+  // mid-drawing was a real flow-breaker. A 600ms hold with a visible fill
+  // makes finishing deliberate, and fits the game's "hold the button"
+  // control language.
+  var FINISH_HOLD_MS = 600;
+  var finishHoldTimer = null;
+  var finishHoldDone = false;
+
+  $btnFinish.addEventListener("pointerdown", function(e){
+    e.preventDefault();
+    finishHoldDone = false;
+    $btnFinish.classList.add("holding");
+    finishHoldTimer = setTimeout(function(){
+      finishHoldTimer = null;
+      finishHoldDone = true;
+      $btnFinish.classList.remove("holding");
+      judgeDrawing();
+    }, FINISH_HOLD_MS);
+  });
+  $btnFinish.addEventListener("pointerup", function(){
+    if (finishHoldTimer !== null){
+      clearTimeout(finishHoldTimer);
+      finishHoldTimer = null;
+    }
+    $btnFinish.classList.remove("holding");
+    if (!finishHoldDone) showToast("「完成」は長押しで確定！");
+  });
+  $btnFinish.addEventListener("pointercancel", function(){
+    if (finishHoldTimer !== null){
+      clearTimeout(finishHoldTimer);
+      finishHoldTimer = null;
+    }
+    $btnFinish.classList.remove("holding");
+  });
+  $btnFinish.addEventListener("contextmenu", function(e){ e.preventDefault(); });
   // Dismisses the result screen without starting a new round -- the
   // current topic, canvas, and pen position are untouched (gameState never
   // left "playing"), so this just resumes the loop right where it paused.
@@ -2129,6 +2265,9 @@
     showScreen("game");
     state.zoom = 1;
     state.rotation = 0;
+    state.sessionRound = 0;
+    state.sessionScores = [];
+    updateTopicLabel();
     $btnZoom.textContent = "🔍 1.0x";
     $btnRotate.textContent = "↻ 0°";
     $playWrap.classList.remove("zoomed-pannable", "panning");
@@ -2154,6 +2293,15 @@
     state.paused = false;
     state.zoom = 1;
     state.rotation = 0;
+    // Advance the 3-round session -- or, if the set just finished, start a
+    // fresh one.
+    if (state.sessionRound >= 2){
+      state.sessionRound = 0;
+      state.sessionScores = [];
+    } else {
+      state.sessionRound++;
+    }
+    updateTopicLabel();
     $mainBtn.textContent = "スタート";
     $mainBtn.classList.remove("drawing-mode", "active-press");
     $btnPause.textContent = "⏸ 一時停止";
