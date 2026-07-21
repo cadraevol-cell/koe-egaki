@@ -5,16 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>こえ描き - 声でお絵かき</title>
 <style>
+  /* ============================================================
+     らくがき帳テーマ (sketchbook theme)
+     The whole app is a kid's doodle notebook on a desk: warm cream
+     paper with a dotted grid, sticker-like buttons with hard
+     cut-out shadows, masking tape holding the drawing paper down,
+     crayon accent colors, and a red-pen "graded homework" result
+     screen. All selectors from the previous dark theme are kept --
+     only their presentation changed.
+     ============================================================ */
   :root{
-    --bg: #10131a;
-    --panel: #1b1f2a;
-    --panel2: #232837;
-    --accent: #7c5cff;
-    --accent2: #ff5c9c;
-    --text: #f2f2f7;
-    --sub: #9aa0b4;
-    --line: #2e3444;
-    --good: #4ade80;
+    --paper: #f7efdc;          /* the desk / notebook paper */
+    --paper-dot: #e4d6b4;      /* dotted grid on the paper */
+    --card: #fffdf6;           /* white paper cards */
+    --ink: #3a3226;            /* hand-written ink: text & borders */
+    --ink-soft: #8a7d68;       /* faded pencil notes */
+    --line: #ddcfae;           /* light rules */
+    --crayon-red: #ff6b4a;
+    --crayon-blue: #4a9de8;
+    --crayon-yellow: #ffc83d;
+    --crayon-green: #58bf6f;
+    --shadow: rgba(58,50,38,.16);
   }
   *{
     box-sizing: border-box;
@@ -26,8 +37,11 @@
   }
   html, body{
     margin:0; padding:0; width:100%; height:100%;
-    background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    background-color: var(--paper);
+    background-image: radial-gradient(var(--paper-dot) 1.2px, transparent 1.3px);
+    background-size: 22px 22px;
+    color: var(--ink);
+    font-family: "Hiragino Maru Gothic ProN", "HGMaruGothicMPRO", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
     overscroll-behavior: none;
     user-select: none;
     -webkit-user-select: none;
@@ -42,76 +56,101 @@
   }
   .screen.active{ opacity:1; pointer-events:auto; }
 
+  /* ---------- shared: sticker buttons ---------- */
+  .icon-btn{
+    background: var(--card);
+    border: 2px solid var(--ink);
+    color: var(--ink);
+    font-size: .78rem;
+    font-weight: 700;
+    font-family: inherit;
+    padding: 8px 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 2px 2px 0 var(--shadow);
+  }
+  .icon-btn:active{
+    transform: translate(2px, 2px);
+    box-shadow: none;
+  }
+
   /* ---------- HOME ---------- */
   #home{
     align-items:center; justify-content:center; text-align:center;
     padding: 24px;
-    background:
-      radial-gradient(circle at 20% 15%, rgba(124,92,255,.25), transparent 45%),
-      radial-gradient(circle at 80% 85%, rgba(255,92,156,.2), transparent 45%),
-      var(--bg);
   }
   #home h1{
-    font-size: clamp(2rem, 8vw, 3.4rem);
-    margin: 0 0 8px;
-    /* Solid, definitely-visible fallback color. Only browsers that confirm
-       support for background-clip:text (below) switch to the transparent
-       gradient-clip effect -- otherwise "color: transparent" alone would
-       render this title as fully invisible. */
-    color: var(--accent);
-    background: linear-gradient(90deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text;
-    background-clip: text;
-    letter-spacing: 1px;
-  }
-  @supports (background-clip: text) or (-webkit-background-clip: text){
-    #home h1{ color: transparent; }
+    font-size: clamp(2.2rem, 9vw, 3.6rem);
+    margin: 0 0 10px;
+    color: var(--ink);
+    letter-spacing: 2px;
+    /* marker-highlight instead of gradient-clipped text: always visible,
+       no @supports fallback dance needed */
+    background: linear-gradient(transparent 60%, var(--crayon-yellow) 60%, var(--crayon-yellow) 92%, transparent 92%);
+    padding: 0 .3em;
   }
   #home p.desc{
-    color: var(--sub);
+    color: var(--ink-soft);
     font-size: clamp(.95rem, 3vw, 1.1rem);
+    font-weight: 700;
     margin: 0 0 6px;
   }
   #home .doodle-icon{
     font-size: 3.4rem;
     margin-bottom: 6px;
-    filter: drop-shadow(0 4px 12px rgba(124,92,255,.4));
+    filter: drop-shadow(3px 3px 0 var(--shadow));
   }
   .big-btn{
-    margin-top: 28px;
-    font-size: 1.2rem;
-    font-weight: 700;
-    padding: 16px 48px;
+    margin-top: 26px;
+    font-size: 1.25rem;
+    font-weight: 800;
+    font-family: inherit;
+    padding: 15px 52px;
     border-radius: 999px;
-    border: none;
-    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border: 3px solid var(--ink);
+    background: var(--crayon-red);
     color: #fff;
     cursor: pointer;
-    box-shadow: 0 8px 24px rgba(124,92,255,.35);
-    transition: transform .12s ease, box-shadow .12s ease;
+    box-shadow: 4px 4px 0 var(--shadow);
+    transition: transform .1s ease, box-shadow .1s ease;
   }
-  .big-btn:active{ transform: scale(.96); box-shadow: 0 4px 12px rgba(124,92,255,.3); }
+  .big-btn:active{ transform: translate(3px,3px); box-shadow: none; }
   #homeMsg{
     margin-top: 18px;
     font-size: .9rem;
-    color: var(--accent2);
+    font-weight: 700;
+    color: var(--crayon-red);
     min-height: 1.4em;
     max-width: 420px;
     line-height: 1.5;
   }
   .howto{
     margin-top: 26px;
-    color: var(--sub);
+    color: var(--ink);
     font-size: .82rem;
-    max-width: 460px;
+    max-width: 480px;
     line-height: 1.7;
     text-align: left;
-    background: rgba(255,255,255,.03);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 14px 18px;
+    background: var(--card);
+    border: 2px solid var(--ink);
+    border-radius: 4px;
+    padding: 16px 18px 14px;
+    box-shadow: 4px 4px 0 var(--shadow);
+    position: relative;
+    transform: rotate(-.5deg);
   }
-  .howto b{ color: var(--text); }
+  /* masking tape holding the note down */
+  .howto::before{
+    content: "";
+    position: absolute;
+    top: -10px; left: 50%;
+    width: 92px; height: 20px;
+    transform: translateX(-50%) rotate(-2deg);
+    background: rgba(255,214,106,.55);
+    border: 1px solid rgba(58,50,38,.12);
+  }
+  .howto b{ color: var(--ink); }
   .howto-steps{
     counter-reset: step;
     margin: 10px 0 0;
@@ -128,36 +167,40 @@
     align-items: flex-start;
     line-height: 1.5;
   }
+  .howto-steps li::before{
+    content: counter(step);
+    flex-shrink: 0;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--crayon-red);
+    border: 2px solid var(--ink);
+    color: #fff;
+    font-size: .72rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .howto-steps li:nth-child(2)::before{ background: var(--crayon-blue); }
+  .howto-steps li:nth-child(3)::before{ background: var(--crayon-green); }
+  .howto-steps li:nth-child(4)::before{ background: var(--crayon-yellow); color: var(--ink); }
   /* The text must be a single flex item (not raw text + <b> mixed directly
      into the flex container), otherwise each text run between <b> tags
      becomes its own anonymous flex item and lays out side-by-side instead
      of wrapping together as one paragraph. min-width:0 lets it actually
      shrink/wrap instead of overflowing (flex items default to min-width:auto). */
   .howto-steps li > span{ min-width: 0; }
-  .howto-steps li::before{
-    content: counter(step);
-    flex-shrink: 0;
-    width: 22px; height: 22px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: #fff;
-    font-size: .75rem;
-    font-weight: 800;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
   .howto-more{ margin-top: 14px; font-size: .78rem; }
   .howto-more summary{
     cursor: pointer;
-    color: var(--accent2);
-    font-weight: 700;
+    color: var(--crayon-blue);
+    font-weight: 800;
     list-style: none;
   }
   .howto-more summary::-webkit-details-marker{ display: none; }
   .howto-more summary::before{ content: "▸ "; }
   .howto-more[open] summary::before{ content: "▾ "; }
-  .howto-more .howto-more-body{ margin-top: 8px; line-height: 1.8; color: var(--sub); }
+  .howto-more .howto-more-body{ margin-top: 8px; line-height: 1.8; color: var(--ink-soft); }
 
   /* ---------- GAME ---------- */
   #game{
@@ -173,30 +216,23 @@
   }
   .topic-box{
     flex: 1 1 auto;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 8px 14px;
+    background: var(--card);
+    border: 2px solid var(--ink);
+    border-radius: 4px;
+    padding: 6px 14px;
     text-align:center;
+    box-shadow: 3px 3px 0 var(--shadow);
   }
-  .topic-box .label{ font-size:.7rem; color: var(--sub); letter-spacing:1px; }
+  .topic-box .label{ font-size:.68rem; color: var(--ink-soft); font-weight: 700; letter-spacing:1px; }
   .topic-box .value{
-    font-size: clamp(1.2rem, 5vw, 1.7rem);
+    font-size: clamp(1.2rem, 5vw, 1.6rem);
     font-weight: 800;
-    color: var(--text);
+    color: var(--ink);
+    background: linear-gradient(transparent 62%, rgba(255,200,61,.6) 62%, rgba(255,200,61,.6) 92%, transparent 92%);
+    display: inline-block;
+    padding: 0 .25em;
   }
   .icon-btn-row{ display:flex; gap:6px; flex-wrap: wrap; }
-  .icon-btn{
-    background: var(--panel2);
-    border: 1px solid var(--line);
-    color: var(--text);
-    font-size: .78rem;
-    padding: 8px 10px;
-    border-radius: 10px;
-    cursor:pointer;
-    white-space: nowrap;
-  }
-  .icon-btn:active{ background: #2c3346; }
 
   .main-area{
     flex: 1 1 auto;
@@ -213,20 +249,34 @@
     min-height: 0;
     overflow: hidden;
   }
+  /* the drawing paper, taped to the desk */
   .play-wrap{
     position: relative;
-    border-radius: 14px;
+    border-radius: 4px;
     overflow: hidden;
-    border: 1px solid var(--line);
+    border: 2.5px solid var(--ink);
+    box-shadow: 5px 5px 0 var(--shadow);
     touch-action: none;
+    background: #fff;
   }
+  .play-wrap::before,
+  .play-wrap::after{
+    content: "";
+    position: absolute;
+    top: -8px;
+    width: 64px; height: 20px;
+    background: rgba(255,214,106,.5);
+    border: 1px solid rgba(58,50,38,.1);
+    z-index: 3;
+    pointer-events: none;
+  }
+  .play-wrap::before{ left: -14px; transform: rotate(-35deg); }
+  .play-wrap::after{ right: -14px; transform: rotate(35deg); }
   .play-wrap.zoomed-pannable{ cursor: grab; }
   .play-wrap.zoomed-pannable.panning{ cursor: grabbing; }
-  /* Layer 1 (the "world": canvas + side scenery) -- this is the layer that
-     actually gets visually zoomed/panned. Layer 2 (the pen, #cursorCanvas)
-     stays a sibling outside of .camera so it is never scaled -- it keeps
-     its normal on-screen size and, while zoomed, is drawn pinned at the
-     viewport center (the camera pans to keep the pen there instead). */
+  /* Layer 1 (the "world": canvas + side scenery) -- the layer that gets
+     visually zoomed/panned. Layer 2 (the pen, #cursorCanvas) stays a
+     sibling outside of .camera so it is never scaled. */
   .camera{
     position: relative;
     display: flex;
@@ -235,20 +285,19 @@
     transform-origin: 0 0;
     will-change: transform;
   }
-  /* Decorative "scenery" backdrop for the side zones -- pure CSS (sky,
-     sun, clouds, distant mountains), no drawing happens here, it just
-     signals "not canvas" without resorting to a text label. */
+  /* Decorative scenery in the side zones -- crayon-drawn sky, sun and
+     hills. No drawing happens here; it just signals "not canvas". */
   .side-zone{
     flex-shrink: 0;
     height: 100%;
     position: relative;
     overflow: hidden;
-    opacity: .88;
+    opacity: .95;
     background:
-      radial-gradient(circle 8px at 50% 18%, #ffe9a8 95%, transparent 100%),
-      radial-gradient(ellipse 60% 26% at 32% 36%, rgba(255,255,255,.9) 60%, transparent 100%),
-      radial-gradient(ellipse 52% 22% at 72% 28%, rgba(255,255,255,.85) 60%, transparent 100%),
-      linear-gradient(180deg, #bfe0f7 0%, #eaf6ff 55%, #f5fbff 100%);
+      radial-gradient(circle 9px at 50% 16%, var(--crayon-yellow) 96%, transparent 100%),
+      radial-gradient(ellipse 60% 24% at 30% 34%, rgba(255,255,255,.95) 60%, transparent 100%),
+      radial-gradient(ellipse 52% 20% at 72% 26%, rgba(255,255,255,.9) 60%, transparent 100%),
+      linear-gradient(180deg, #bfe0f4 0%, #e3f2fb 60%, #f2f9ff 100%);
     pointer-events: none;
   }
   .side-zone::after{
@@ -256,13 +305,11 @@
     position: absolute;
     left: 0; right: 0; bottom: 0;
     height: 42%;
-    background: linear-gradient(180deg, #9cc496, #6f9c68);
+    background: linear-gradient(180deg, #a5d18b, #74a35f);
     clip-path: polygon(0% 100%, 0% 58%, 22% 26%, 40% 52%, 58% 16%, 78% 46%, 100% 22%, 100% 100%);
   }
-  /* Only this square (guideCanvas + drawCanvas) ever gets visually spun by
-     "回転" -- side zones, the pen, and everything else are untouched. Since
-     it's a square, rotating it around its own center never changes its
-     bounding box, so no other layout needs to react to this. */
+  /* Only this square (guideCanvas + drawCanvas) gets visually spun by
+     回転 -- side zones, the pen, and everything else are untouched. */
   .canvas-wrap{
     position: relative;
     flex-shrink: 0;
@@ -279,6 +326,7 @@
     inset: 0;
     width: 100%; height: 100%;
     pointer-events: none;
+    z-index: 4;
   }
   #guideCanvas{
     pointer-events: none;
@@ -289,44 +337,47 @@
   .pitch-indicator{
     position: absolute;
     top: 8px; right: 8px;
-    background: rgba(0,0,0,.55);
-    color: #fff;
+    background: var(--ink);
+    color: #fff8ea;
     font-size: .72rem;
-    padding: 3px 9px;
-    border-radius: 8px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
     pointer-events: none;
     z-index: 5;
     transition: background .15s ease;
   }
   .pitch-indicator.voice-on{
-    background: rgba(34,165,99,.9);
-    font-weight: 700;
+    background: var(--crayon-green);
+    color: #fff;
   }
+  /* the crayon tray */
   .palette{
     flex: 0 0 auto;
     width: 68px;
     display:flex;
     flex-direction:column;
     gap:8px;
-    background: var(--panel);
-    border: 1px solid var(--line);
+    background: var(--card);
+    border: 2px solid var(--ink);
     border-radius: 14px;
     padding: 8px;
     overflow-y: auto;
+    box-shadow: 3px 3px 0 var(--shadow);
   }
   .swatch{
     width: 100%;
     aspect-ratio: 1/1;
     border-radius: 50%;
-    border: 3px solid rgba(255,255,255,.15);
+    border: 2px solid rgba(58,50,38,.3);
     cursor: pointer;
     position: relative;
     flex-shrink: 0;
     padding: 0;
   }
   .swatch.selected{
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+    border-color: var(--ink);
+    box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--crayon-red);
   }
   input.custom-swatch{
     -webkit-appearance: none;
@@ -347,40 +398,42 @@
     flex: 1 1 auto;
     min-height: 62px;
     border-radius: 18px;
-    border: none;
-    font-size: 1.1rem;
+    border: 3px solid var(--ink);
+    font-size: 1.15rem;
     font-weight: 800;
+    font-family: inherit;
     color: #fff;
-    background: linear-gradient(180deg, var(--accent), #5b3fd6);
+    background: var(--crayon-blue);
     cursor: pointer;
-    box-shadow: 0 6px 18px rgba(124,92,255,.4);
+    box-shadow: 4px 4px 0 var(--shadow);
     touch-action: none;
   }
   #mainBtn.drawing-mode{
-    background: linear-gradient(180deg, var(--accent2), #d63f7c);
-    box-shadow: 0 6px 18px rgba(255,92,156,.45);
+    background: var(--crayon-red);
   }
   #mainBtn.active-press{
-    transform: scale(.97);
-    filter: brightness(1.15);
+    transform: translate(3px,3px);
+    box-shadow: none;
+    filter: brightness(1.06);
   }
   #btnFinish{
-    flex: 0 0 76px;
+    flex: 0 0 80px;
     min-height: 62px;
     border-radius: 18px;
-    border: none;
+    border: 3px solid var(--ink);
     font-size: .8rem;
     font-weight: 800;
+    font-family: inherit;
     line-height: 1.3;
-    color: #133020;
-    background: linear-gradient(180deg, var(--good), #22a563);
+    color: #fff;
+    background: var(--crayon-green);
     cursor: pointer;
-    box-shadow: 0 6px 18px rgba(74,222,128,.4);
+    box-shadow: 4px 4px 0 var(--shadow);
     touch-action: none;
     position: relative;
     overflow: hidden;
   }
-  #btnFinish small{ display: block; font-size: .6rem; font-weight: 700; opacity: .75; }
+  #btnFinish small{ display: block; font-size: .6rem; font-weight: 700; opacity: .85; }
   /* Hold-to-confirm fill: sits next to the most-mashed button in the game
      (描く), so a plain tap must not fire it -- the white sweep telegraphs
      the hold requirement and its progress. Duration mirrors FINISH_HOLD_MS. */
@@ -398,16 +451,17 @@
     transition: transform .6s linear;
   }
 
-  /* ---------- always-visible controls (speed / thickness / sensitivity) ---------- */
+  /* ---------- mode toggles + collapsed tuning sliders ---------- */
   .controls-row{
     flex: 0 0 auto;
     display: flex;
     flex-wrap: wrap;
     gap: 10px 16px;
-    background: var(--panel);
-    border: 1px solid var(--line);
+    background: var(--card);
+    border: 2px solid var(--ink);
     border-radius: 14px;
-    padding: 8px 14px;
+    padding: 8px 12px;
+    box-shadow: 3px 3px 0 var(--shadow);
   }
   .controls-row .ctrl{
     flex: 1 1 140px;
@@ -415,9 +469,10 @@
     flex-direction: column;
     gap: 3px;
     font-size: .68rem;
-    color: var(--sub);
+    font-weight: 700;
+    color: var(--ink-soft);
   }
-  .controls-row input[type=range]{ width: 100%; accent-color: var(--accent); }
+  .controls-row input[type=range]{ width: 100%; accent-color: var(--crayon-red); }
   .ctrl-toggles{
     flex: 1 1 100%;
     display: flex;
@@ -425,14 +480,14 @@
     flex-wrap: wrap;
   }
   .ctrl-toggles .icon-btn{ flex: 1 1 auto; text-align: center; }
-  .ctrl-toggles .icon-btn.active-toggle{ background: #38405a; border-color: var(--accent); }
+  .ctrl-toggles .icon-btn.active-toggle{ background: var(--crayon-yellow); }
   .slider-panel{
     flex: 1 1 100%;
     display: flex;
     flex-wrap: wrap;
     gap: 10px 16px;
     padding-top: 6px;
-    border-top: 1px solid var(--line);
+    border-top: 2px dashed var(--line);
   }
   .slider-panel[hidden]{ display: none; }
 
@@ -447,25 +502,21 @@
     flex: 1 1 auto;
     min-height: 50px;
     font-size: .85rem;
-    font-weight: 700;
+    font-weight: 800;
     line-height: 1.3;
     text-align: center;
   }
 
-  /* ---------- result screen ---------- */
+  /* ---------- result screen: graded homework ---------- */
   #result{
     align-items: center; justify-content: center;
     padding: 20px;
-    background:
-      radial-gradient(circle at 20% 15%, rgba(74,222,128,.18), transparent 45%),
-      radial-gradient(circle at 80% 85%, rgba(124,92,255,.2), transparent 45%),
-      var(--bg);
   }
   .result-card{
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 20px;
-    padding: 28px 24px;
+    background: var(--card);
+    border: 2.5px solid var(--ink);
+    border-radius: 4px;
+    padding: 30px 24px 26px;
     max-width: 620px;
     width: 100%;
     display: flex;
@@ -473,6 +524,18 @@
     gap: 24px;
     align-items: center;
     justify-content: center;
+    box-shadow: 6px 6px 0 var(--shadow);
+    position: relative;
+    transform: rotate(-.4deg);
+  }
+  .result-card::before{
+    content: "";
+    position: absolute;
+    top: -11px; left: 50%;
+    width: 104px; height: 22px;
+    transform: translateX(-50%) rotate(1.5deg);
+    background: rgba(255,214,106,.55);
+    border: 1px solid rgba(58,50,38,.12);
   }
   .result-info{
     flex: 1 1 260px;
@@ -486,70 +549,75 @@
     align-items: center;
     justify-content: center;
   }
+  /* the artwork, mounted slightly crooked like on a fridge door */
   .result-preview img{
     width: 100%;
     aspect-ratio: 1 / 1;
     object-fit: contain;
     background: #fff;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    border: 2.5px solid var(--ink);
+    border-radius: 3px;
+    padding: 5px;
+    box-shadow: 4px 4px 0 var(--shadow);
+    transform: rotate(1.4deg);
   }
   .result-title{
     font-size: 2.1rem;
     font-weight: 900;
     margin-bottom: 14px;
-    color: var(--good); /* fallback -- see #home h1 for why */
-    background: linear-gradient(90deg, var(--good), var(--accent));
-    -webkit-background-clip: text;
-    background-clip: text;
+    color: var(--ink);
+    background: linear-gradient(transparent 60%, var(--crayon-yellow) 60%, var(--crayon-yellow) 92%, transparent 92%);
+    display: inline-block;
+    padding: 0 .3em;
   }
-  .judge-label{ font-size:.75rem; color:var(--sub); letter-spacing:1px; }
+  .judge-label{ font-size:.75rem; color:var(--ink-soft); font-weight:700; letter-spacing:1px; }
   .judge-topic{ font-size:1.1rem; font-weight:800; margin-top:2px; }
+  /* the teacher's red pen grade */
   .judge-percent{
-    font-size: 3.2rem;
+    font-size: 3.4rem;
     font-weight: 900;
-    margin: 12px 0 4px;
-    color: var(--accent); /* fallback -- see #home h1 for why */
-    background: linear-gradient(90deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text;
-    background-clip: text;
-  }
-  @supports (background-clip: text) or (-webkit-background-clip: text){
-    .result-title, .judge-percent{ color: transparent; }
+    margin: 10px 0 4px;
+    color: #e5484d;
+    transform: rotate(-2deg);
+    text-shadow: 2px 2px 0 rgba(229,72,77,.15);
   }
   .session-line{
     font-size: .85rem;
-    font-weight: 700;
-    color: #ffd76a;
+    font-weight: 800;
+    color: var(--crayon-blue);
     margin-bottom: 4px;
     min-height: 1.2em;
   }
-  .best-score{ font-size: .78rem; color: var(--good); font-weight: 700; margin-bottom: 10px; min-height: 1.2em; }
-  .judge-persona{ font-size:.8rem; color:var(--sub); margin-bottom:6px; }
+  .best-score{ font-size: .78rem; color: var(--crayon-green); font-weight: 800; margin-bottom: 10px; min-height: 1.2em; }
+  .judge-persona{ font-size:.8rem; color:var(--ink-soft); font-weight:700; margin-bottom:6px; }
   .judge-comment{
     font-size: .98rem;
-    color: var(--text);
+    color: var(--ink);
     line-height: 1.6;
-    margin-bottom: 18px;
+    margin-bottom: 14px;
     min-height: 3em;
+    background: #fbf5e4;
+    border: 2px dashed var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
   }
-  .judge-caption{ font-size:.68rem; color:var(--sub); margin-bottom:18px; }
+  .judge-caption{ font-size:.68rem; color:var(--ink-soft); margin-bottom:16px; }
   .hide-topic-toggle{
     display: flex;
     align-items: center;
     gap: 8px;
     font-size: .8rem;
-    color: var(--text);
+    font-weight: 700;
+    color: var(--ink);
     text-align: left;
-    background: rgba(255,255,255,.04);
-    border: 1px solid var(--line);
+    background: #fbf5e4;
+    border: 2px dashed var(--line);
     border-radius: 10px;
     padding: 10px 12px;
     margin-bottom: 16px;
     cursor: pointer;
   }
-  .hide-topic-toggle input{ flex-shrink: 0; width: 18px; height: 18px; accent-color: var(--accent); }
+  .hide-topic-toggle input{ flex-shrink: 0; width: 18px; height: 18px; accent-color: var(--crayon-red); }
   .result-actions{
     display: flex;
     flex-direction: column;
@@ -557,6 +625,7 @@
   }
   .result-actions .icon-btn{ padding: 12px; font-size: .85rem; }
   .result-actions .big-btn{ margin-top: 0; padding: 14px 20px; font-size: 1rem; width: 100%; }
+
   .confetti-piece{
     position: absolute;
     top: -12px;
@@ -578,12 +647,13 @@
     left: 50%; bottom: 22px;
     transform: translateX(-50%) translateY(16px);
     max-width: calc(100% - 32px);
-    background: rgba(15,17,26,.94);
-    border: 1px solid var(--line);
-    color: #fff;
+    background: var(--ink);
+    border: 2px solid var(--ink);
+    color: #fff8ea;
     padding: 11px 20px;
     border-radius: 999px;
     font-size: .85rem;
+    font-weight: 700;
     text-align: center;
     z-index: 300;
     opacity: 0;
@@ -612,7 +682,7 @@
 
   <!-- HOME SCREEN -->
   <div id="home" class="screen active">
-    <div class="doodle-icon">🎤🖌️</div>
+    <div class="doodle-icon">🐼🖍️</div>
     <h1>こえ描き</h1>
     <p class="desc">声の高さでペンが動く、お絵かきゲーム</p>
     <button class="big-btn" id="startBtn">はじめる</button>
@@ -1512,6 +1582,9 @@
       cctx.globalAlpha = 1;
     }
 
+    // A yellow pencil to match the sketchbook theme: warm yellow shaft,
+    // ink-brown outlines, a color band showing the selected crayon color,
+    // and a wooden nib whose tint telegraphs the three pen states.
     var bodyHalfW = 4.5;
     var shaftTopY = -40;
     var shaftBottomY = -11;
@@ -1522,17 +1595,17 @@
     cctx.quadraticCurveTo(bodyHalfW, shaftTopY, bodyHalfW, shaftTopY + 5);
     cctx.lineTo(bodyHalfW, shaftBottomY);
     cctx.closePath();
-    cctx.fillStyle = "#3a3f4d";
+    cctx.fillStyle = "#ffb838";
     cctx.fill();
-    cctx.lineWidth = 1;
-    cctx.strokeStyle = "#1c1f28";
+    cctx.lineWidth = 1.5;
+    cctx.strokeStyle = "#3a3226";
     cctx.stroke();
 
     cctx.beginPath();
     cctx.rect(-bodyHalfW, shaftBottomY - 9, bodyHalfW * 2, 9);
     cctx.fillStyle = state.currentColor;
     cctx.fill();
-    cctx.strokeStyle = "#1c1f28";
+    cctx.strokeStyle = "#3a3226";
     cctx.stroke();
 
     cctx.beginPath();
@@ -1540,10 +1613,10 @@
     cctx.lineTo(-3, shaftBottomY);
     cctx.lineTo(3, shaftBottomY);
     cctx.closePath();
-    cctx.fillStyle = isInking ? "#d8d8d8" : (isWaitingForVoice ? "#ffd76a" : "#9aa0b4");
+    cctx.fillStyle = isInking ? "#6b6156" : (isWaitingForVoice ? "#ff8b3d" : "#e3d3b4");
     cctx.fill();
-    cctx.lineWidth = 1;
-    cctx.strokeStyle = "#1c1f28";
+    cctx.lineWidth = 1.5;
+    cctx.strokeStyle = "#3a3226";
     cctx.stroke();
 
     cctx.restore();
@@ -2133,7 +2206,7 @@
     });
   }
 
-  var CONFETTI_COLORS = ["#ff5c9c", "#7c5cff", "#4ade80", "#ffd76a", "#38bdf8"];
+  var CONFETTI_COLORS = ["#ff6b4a", "#4a9de8", "#58bf6f", "#ffc83d", "#b78ae8"];
 
   function launchConfetti(){
     for (var i = 0; i < 26; i++){
